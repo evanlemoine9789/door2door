@@ -1,13 +1,7 @@
 {
   "functions": {
     "src/app/api/**/*.ts": {
-      "runtime": "@vercel/node"
+      "runtime": "nodejs20.x"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    }
-  ]
+  }
 }
