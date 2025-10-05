@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, LogOut, Phone, Snowflake, Flame, Search, Map } from "lucide-react"
+import { LayoutDashboard, Users, LogOut, Phone, Snowflake, Flame, Search, Map, Settings } from "lucide-react"
 
 import {
   Sidebar,
@@ -145,9 +145,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenu>
         </SidebarGroup>
         
-        {/* Logout Section */}
+        {/* Bottom Section - Team & Logout */}
         <SidebarGroup className="mt-auto">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <Link href="/settings/team">
+                  <Users />
+                  <span>Team</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton 
                 onClick={signOut}
