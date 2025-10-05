@@ -44,7 +44,8 @@ export default function CRMPage() {
   }
 
   const handleDeleteLead = (leadId: string) => {
-    // TODO: Implement delete functionality
+    console.log('🗑️ Lead deleted from UI, refreshing list:', leadId)
+    // Close details if the deleted lead was selected
     if (selectedLead?.id === leadId) {
       handleCloseDetails()
     }

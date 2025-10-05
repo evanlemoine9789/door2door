@@ -203,11 +203,16 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
     if (!currentLead) return
     if (!confirm(`Delete ${currentLead.company}? This cannot be undone.`)) return
     try {
-      const { error } = await supabase.from('leads').delete().eq('id', currentLead.id)
-      if (error) throw error
+      console.log('🗑️ Deleting lead from engaged_leads table:', currentLead.id)
+      const { error } = await supabase.from('engaged_leads').delete().eq('id', currentLead.id)
+      if (error) {
+        console.error('❌ Supabase delete error:', error)
+        throw error
+      }
+      console.log('✅ Lead deleted successfully')
       onDelete(currentLead.id)
     } catch (err) {
-      console.error('Error deleting lead:', err)
+      console.error('💥 Error deleting lead:', err)
       alert('Failed to delete lead. Please try again.')
     }
   }
