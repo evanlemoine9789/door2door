@@ -40,11 +40,11 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     title: "Leads",
-    href: "/crm/leads",
+    href: "/crm/leads/engaged-leads",
     icon: Users,
     children: [
       { title: 'Cold Leads', href: '/crm/leads/cold-leads', icon: Snowflake },
-      { title: 'Engaged Leads', href: '/crm/leads', icon: Flame }
+      { title: 'Engaged Leads', href: '/crm/leads/engaged-leads', icon: Flame }
     ]
   },
   {
