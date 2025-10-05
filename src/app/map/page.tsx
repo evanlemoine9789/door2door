@@ -2,15 +2,29 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "@/lib/supabase"
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
-import MarkerClusterGroup from 'react-leaflet-cluster'
+import dynamic from 'next/dynamic'
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ChevronDown, ChevronUp, Route, Loader2, CheckCircle, AlertCircle, MapPin } from "lucide-react"
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+
+// Dynamically import Leaflet components to avoid SSR issues
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false })
+const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false })
+const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false })
+const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false })
+const useMap = dynamic(() => import('react-leaflet').then(mod => mod.useMap), { ssr: false })
+const MarkerClusterGroup = dynamic(() => import('react-leaflet-cluster'), { ssr: false })
+
+// Import Leaflet only on client side
+let L: any = null
+if (typeof window !== 'undefined') {
+  import('leaflet').then(leaflet => {
+    L = leaflet.default
+    import('leaflet/dist/leaflet.css')
+  })
+}
 
 // Custom cluster styles and tile grid fix
 const clusterStyles = `
@@ -99,25 +113,27 @@ const clusterStyles = `
   }
 `
 
-// Inject cluster styles
-if (typeof document !== 'undefined') {
+// Inject cluster styles - only on client side
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const style = document.createElement('style')
   style.textContent = clusterStyles
   document.head.appendChild(style)
 }
 
-// Fix for default markers in React-Leaflet and make them larger
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [40, 65],
-  iconAnchor: [20, 65],
-  popupAnchor: [0, -65],
-  shadowSize: [50, 64],
-  shadowAnchor: [20, 64]
-})
+// Fix for default markers in React-Leaflet and make them larger - only on client side
+if (typeof window !== 'undefined' && L) {
+  delete (L.Icon.Default.prototype as any)._getIconUrl
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    iconSize: [40, 65],
+    iconAnchor: [20, 65],
+    popupAnchor: [0, -65],
+    shadowSize: [50, 64],
+    shadowAnchor: [20, 64]
+  })
+}
 
 // Color mapping for practice types - using distinct bright colors
 const PRACTICE_TYPE_COLORS = {
@@ -178,6 +194,8 @@ const getPracticeTypeColor = (practiceType: string | null | undefined): string =
 
 // Function to create white marker icon
 const createWhiteMarkerIcon = (isSelected: boolean = false) => {
+  if (!L) return null
+  
   const selectedStyles = isSelected ? `
     border: 4px solid #FFD700;
     box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.5), 0 3px 12px rgba(0,0,0,0.4);
@@ -364,7 +382,7 @@ export default function MapPage() {
   }>({ type: null, message: "" })
   
   // Viewport-based loading state
-  const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null)
+  const [mapBounds, setMapBounds] = useState<any>(null)
   const [isLoadingMarkers, setIsLoadingMarkers] = useState(false)
   const [totalLeadsCount, setTotalLeadsCount] = useState(0)
   
@@ -375,7 +393,15 @@ export default function MapPage() {
   const [isLoadingFilters, setIsLoadingFilters] = useState(true)
   
   // Map instance ref for proper cleanup
-  const mapInstanceRef = useRef<L.Map | null>(null)
+  const mapInstanceRef = useRef<any>(null)
+  
+  // Client-side loading state
+  const [isClient, setIsClient] = useState(false)
+
+  // Initialize client-side state
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Handle current location found
   const handleLocationFound = (lat: number, lng: number) => {
@@ -701,12 +727,14 @@ export default function MapPage() {
 
   // Initial load with default bounds (Connecticut area)
   useEffect(() => {
-    const defaultBounds = L.latLngBounds(
-      L.latLng(40.5, -74.0), // Southwest corner
-      L.latLng(42.0, -71.0)  // Northeast corner
-    )
-    setMapBounds(defaultBounds)
-    fetchViewportData(defaultBounds)
+    if (L) {
+      const defaultBounds = L.latLngBounds(
+        L.latLng(40.5, -74.0), // Southwest corner
+        L.latLng(42.0, -71.0)  // Northeast corner
+      )
+      setMapBounds(defaultBounds)
+      fetchViewportData(defaultBounds)
+    }
   }, [])
 
   // Cleanup effect to prevent memory leaks
@@ -723,6 +751,29 @@ export default function MapPage() {
       }
     }
   }, [])
+
+  // Show loading state while client-side components are loading
+  if (!isClient) {
+    return (
+      <div className="h-screen flex flex-col">
+        {/* Header */}
+        <div className="bg-background border-b border-border p-6">
+          <h1 className="text-3xl font-bold">Map View</h1>
+          <p className="text-muted-foreground mt-2">
+            Interactive map showing all leads with geocoded locations.
+          </p>
+        </div>
+        
+        {/* Loading State */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span className="text-lg">Loading map...</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-screen flex flex-col">
@@ -951,6 +1002,8 @@ export default function MapPage() {
               zoomToBoundsOnClick={true}
               disableClusteringAtZoom={15}
               iconCreateFunction={(cluster) => {
+                if (!L) return null
+                
                 const count = cluster.getChildCount()
                 let size = 'small'
                 if (count < 10) {
@@ -1040,7 +1093,11 @@ export default function MapPage() {
                           
                           {record.cold_leads?.website && (
                             <button
-                              onClick={() => window.open(record.cold_leads.website, '_blank')}
+                              onClick={() => {
+                                if (typeof window !== 'undefined') {
+                                  window.open(record.cold_leads.website, '_blank')
+                                }
+                              }}
                               className="w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-green-600 hover:bg-green-700 text-white shadow-sm"
                             >
                               Visit Site
