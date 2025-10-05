@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { fetchJustCallChartData, JustCallChartData } from "@/lib/supabase-smartlead"
+import { fetchJustCallChartData, JustCallChartData } from "@/lib/supabase-justcall"
 
 const chartConfig = {
   callsMade: { label: "Calls Made", color: "#3b82f6" },

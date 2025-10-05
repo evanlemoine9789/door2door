@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, LogOut, Phone, Snowflake, Flame, Search, Settings } from "lucide-react"
+import { LayoutDashboard, Users, LogOut, Phone, Snowflake, Flame, Search, Settings, Map } from "lucide-react"
 
 import {
   Sidebar,
@@ -51,6 +51,11 @@ const NAV_ITEMS: NavItem[] = [
     title: "Dialer",
     href: "/dialer",
     icon: Phone,
+  },
+  {
+    title: "Map",
+    href: "/map",
+    icon: Map,
   },
 ]
 

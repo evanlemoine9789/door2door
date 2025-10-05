@@ -138,7 +138,7 @@ export function ColdEmailLeadDetails({ lead }: ColdEmailLeadDetailsProps) {
 
               {lead.message_history_url && (
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Smartlead Thread</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Email Thread</label>
                   <div className="mt-1">
                     <button
                       onClick={() => window.open(lead.message_history_url!, '_blank', 'noopener,noreferrer')}

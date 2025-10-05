@@ -1,0 +1,47 @@
+/* Remove grid lines and tile boundaries */
+.leaflet-tile {
+  border: none !important;
+  outline: none !important;
+}
+
+/* Set background color for map tiles to match dark theme */
+.map-tiles {
+  background-color: #1f2937 !important;
+}
+
+/* Ensure map container has solid background */
+.leaflet-container {
+  background-color: #1f2937 !important;
+}
+
+/* Override Leaflet popup default styling to remove white border/window effect */
+.leaflet-popup-content-wrapper {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-popup-tip {
+  background: #1f2937 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.leaflet-popup-close-button {
+  display: none !important;
+}
+
+/* Custom cluster icon styling */
+.custom-cluster-icon {
+  background: transparent !important;
+  border: none !important;
+}
