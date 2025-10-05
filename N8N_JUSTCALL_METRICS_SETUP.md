@@ -3,7 +3,7 @@
 This document explains how to extend your existing n8n workflow to pull daily JustCall metrics and store them in the new `justcall_daily_metrics` table.
 
 ## Current Workflow
-You already have a workflow that runs daily and pulls booked calls from JustCall to add to the leads table in Supabase.
+You already have a workflow that runs daily and pulls booked calls from JustCall to add to the engaged_leads table in Supabase.
 
 ## New Workflow Extension
 

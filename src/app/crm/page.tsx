@@ -8,7 +8,18 @@ import { Drawer, DrawerContent } from "@/components/ui/drawer"
 import { useLeads } from "@/hooks/use-leads"
 
 export default function CRMPage() {
-  const { leads, loading, error, refreshLeads } = useLeads()
+  const { 
+    leads, 
+    loading, 
+    error, 
+    refreshLeads,
+    currentPage,
+    pageSize,
+    totalPages,
+    totalLeads,
+    fetchLeads,
+    setPageSize
+  } = useLeads()
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
@@ -34,7 +45,6 @@ export default function CRMPage() {
 
   const handleDeleteLead = (leadId: string) => {
     // TODO: Implement delete functionality
-    console.log("Delete lead:", leadId)
     if (selectedLead?.id === leadId) {
       handleCloseDetails()
     }
@@ -47,6 +57,15 @@ export default function CRMPage() {
     setSelectedLead(updatedLead)
     // Refresh the leads list
     refreshLeads()
+  }
+
+  const handlePageChange = (newPage: number) => {
+    fetchLeads(newPage, pageSize)
+  }
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    fetchLeads(1, newPageSize) // Reset to page 1 when changing page size
   }
 
   // Show loading state
@@ -100,6 +119,13 @@ export default function CRMPage() {
             leads={leads}
             onLeadSelect={handleLeadSelect}
             selectedLeadId={selectedLead?.id}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalLeads={totalLeads}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={loading}
           />
         </div>
 

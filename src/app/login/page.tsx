@@ -1,78 +1,41 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [debugInfo, setDebugInfo] = useState('')
+  const router = useRouter()
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    setDebugInfo('')
 
     try {
-      if (isSignUp) {
-        // Sign up
-        console.log('Attempting sign up with:', { email, password })
-        
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-        console.log('Sign up response:', { data, error })
-
-        if (error) {
-          console.error('Sign up error:', error)
-          throw error
-        }
-
-        if (data.user && !data.session) {
-          // Email confirmation required
-          setDebugInfo(`User created successfully! User ID: ${data.user.id}. Check your email for confirmation.`)
-          toast.success('Check your email for the confirmation link!')
-          setEmail('')
-          setPassword('')
-        } else if (data.session) {
-          // Auto-confirmed (if email confirmations are disabled)
-          setDebugInfo(`User created and logged in! User ID: ${data.user?.id}`)
-          toast.success('Account created and logged in successfully!')
-          window.location.href = '/dashboard'
-        }
-      } else {
-        // Sign in
-        console.log('Attempting sign in with:', { email })
-        
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-
-        console.log('Sign in response:', { data, error })
-
-        if (error) {
-          console.error('Sign in error:', error)
-          throw error
-        }
-
-        setDebugInfo(`Logged in successfully! User ID: ${data.user?.id}`)
-        toast.success('Logged in successfully!')
-        window.location.href = '/dashboard'
+      if (error) {
+        console.error('Sign in error:', error)
+        throw error
       }
+
+      toast.success('Logged in successfully!')
+      router.push('/dashboard')
     } catch (error: any) {
       console.error('Auth error:', error)
-      setDebugInfo(`Error: ${error.message}`)
-      toast.error(error.message || 'An error occurred')
+      toast.error(error.message || 'Invalid email or password')
     } finally {
       setIsLoading(false)
     }
@@ -83,17 +46,14 @@ export default function LoginPage() {
       <Card className="w-full max-w-md bg-gray-800 border-gray-700">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-white">
-            {isSignUp ? 'Create Account' : 'Welcome Back'}
+            Welcome Back
           </CardTitle>
           <CardDescription className="text-gray-400">
-            {isSignUp 
-              ? 'Enter your details to create your account' 
-              : 'Enter your credentials to access your account'
-            }
+            Enter your credentials to access your account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-white">Email</Label>
               <Input
@@ -103,7 +63,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
               />
             </div>
             <div className="space-y-2">
@@ -115,7 +75,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+                className="bg-gray-700 border-gray-600 text-white placeholder:text-gray-400 focus:border-blue-500"
               />
             </div>
             <Button
@@ -123,29 +83,27 @@ export default function LoginPage() {
               className="w-full bg-blue-600 hover:bg-blue-700 text-white"
               disabled={isLoading}
             >
-              {isLoading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
+              {isLoading ? (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Signing in...</span>
+                </div>
+              ) : (
+                'Sign In'
+              )}
             </Button>
           </form>
           
-          {/* Debug Info */}
-          {debugInfo && (
-            <div className="mt-4 p-3 bg-gray-700 rounded text-sm text-gray-300">
-              <strong>Debug Info:</strong><br />
-              {debugInfo}
-            </div>
-          )}
-          
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-blue-400 hover:text-blue-300 text-sm"
-            >
-              {isSignUp 
-                ? 'Already have an account? Sign in' 
-                : "Don't have an account? Sign up"
-              }
-            </button>
+          <div className="mt-6 text-center">
+            <p className="text-gray-400 text-sm">
+              Don't have an account?{' '}
+              <Link 
+                href="/signup" 
+                className="text-blue-400 hover:text-blue-300 font-medium"
+              >
+                Sign up
+              </Link>
+            </p>
           </div>
         </CardContent>
       </Card>

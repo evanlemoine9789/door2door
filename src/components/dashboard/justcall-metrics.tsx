@@ -5,10 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
-import { Phone, Calendar, TrendingUp, Users } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { useJustCallMetrics, TimePeriod } from '@/hooks/use-justcall-metrics';
-import { fetchSmartleadTotals, SmartleadTotals } from '@/lib/supabase-smartlead';
-import { SmartleadEmailArea } from '@/components/charts/SmartleadEmailArea';
 import { ColdCallsAreaChart } from '@/components/charts/ColdCallsAreaChart';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -20,11 +18,6 @@ import {
 export function JustCallMetrics() {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('today');
   const { metrics, summary, loading, error, fetchMetrics } = useJustCallMetrics();
-  const [emailMetrics, setEmailMetrics] = useState<SmartleadTotals>({ sent: 0, replies: 0, positive: 0, ratePct: '0%' });
-
-  useEffect(() => {
-    fetchMetrics(selectedPeriod);
-  }, [selectedPeriod]);
 
   useEffect(() => {
     const getDateRange = (period: TimePeriod) => {
@@ -47,11 +40,17 @@ export function JustCallMetrics() {
       }
     };
 
-    const { start, end } = getDateRange(selectedPeriod);
-    fetchSmartleadTotals({ start, end })
-      .then(setEmailMetrics)
-      .catch(console.error);
-  }, [selectedPeriod]);
+    // Fetch JustCall metrics only
+    const fetchAllMetrics = async () => {
+      try {
+        await fetchMetrics(selectedPeriod);
+      } catch (error) {
+        console.error('Error fetching metrics:', error);
+      }
+    };
+
+    fetchAllMetrics();
+  }, [selectedPeriod, fetchMetrics]);
 
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period as TimePeriod);
@@ -230,102 +229,6 @@ export function JustCallMetrics() {
         </CardContent>
       </Card>
 
-      {/* Cold Email Metrics */}
-      <div className="space-y-4">
-        <h2 className="text-2xl font-bold text-card-foreground">Cold Email</h2>
-        <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-4 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
-          <Card className="@container/card">
-            <CardHeader>
-              <CardDescription>Total Emails Sent</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                {emailMetrics.sent.toLocaleString()}
-              </CardTitle>
-              <CardAction>
-                <Badge variant="outline">
-                  <IconTrendingUp />
-                  +12.5%
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-              <div className="line-clamp-1 flex gap-2 font-medium">
-                Trending up this month <IconTrendingUp className="size-4" />
-              </div>
-              <div className="text-muted-foreground">
-                Emails for the last 6 months
-              </div>
-            </CardFooter>
-          </Card>
-
-          <Card className="@container/card">
-            <CardHeader>
-              <CardDescription>Total Replies</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                {emailMetrics.replies.toLocaleString()}
-              </CardTitle>
-              <CardAction>
-                <Badge variant="outline">
-                  <IconTrendingDown />
-                  -20%
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-              <div className="line-clamp-1 flex gap-2 font-medium">
-                Down 20% this period <IconTrendingDown className="size-4" />
-              </div>
-              <div className="text-muted-foreground">
-                Conversion needs attention
-              </div>
-            </CardFooter>
-          </Card>
-
-          <Card className="@container/card">
-            <CardHeader>
-              <CardDescription>Positive Replies</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                {emailMetrics.positive.toLocaleString()}
-              </CardTitle>
-              <CardAction>
-                <Badge variant="outline">
-                  <IconTrendingUp />
-                  +12.5%
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-              <div className="line-clamp-1 flex gap-2 font-medium">
-                Strong conversion rate <IconTrendingUp className="size-4" />
-              </div>
-              <div className="text-muted-foreground">Performance exceeds targets</div>
-            </CardFooter>
-          </Card>
-
-          <Card className="@container/card">
-            <CardHeader>
-              <CardDescription>Positive Reply Rate</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-                {emailMetrics.ratePct}
-              </CardTitle>
-              <CardAction>
-                <Badge variant="outline">
-                  <IconTrendingUp />
-                  +12.5%
-                </Badge>
-              </CardAction>
-            </CardHeader>
-            <CardFooter className="flex-col items-start gap-1.5 text-sm">
-              <div className="line-clamp-1 flex gap-2 font-medium">
-                Strong conversion rate <IconTrendingUp className="size-4" />
-              </div>
-              <div className="text-muted-foreground">Performance exceeds targets</div>
-            </CardFooter>
-          </Card>
-        </div>
-      </div>
-
-      {/* Cold Email Daily Trend Chart */}
-      <SmartleadEmailArea />
     </div>
   );
 }

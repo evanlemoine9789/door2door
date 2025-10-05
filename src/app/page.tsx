@@ -37,12 +37,19 @@ export default function Home() {
             Your modern business management platform
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button 
-            onClick={() => router.push('/login')}
+            onClick={() => router.push('/signup')}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
           >
             Get Started
+          </Button>
+          <Button 
+            onClick={() => router.push('/login')}
+            variant="outline"
+            className="w-full border-gray-600 text-gray-300 hover:bg-gray-700"
+          >
+            Sign In
           </Button>
         </CardContent>
       </Card>

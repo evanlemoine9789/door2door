@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 export type TimePeriod = 'today' | '7days' | '30days';
@@ -28,7 +28,7 @@ export function useJustCallMetrics() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchMetrics = async (period: TimePeriod) => {
+  const fetchMetrics = React.useCallback(async (period: TimePeriod) => {
     setLoading(true);
     setError(null);
 
@@ -117,7 +117,7 @@ export function useJustCallMetrics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   return {
     metrics,

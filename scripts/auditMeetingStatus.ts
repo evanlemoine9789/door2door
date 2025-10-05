@@ -11,7 +11,7 @@ const supabase = createClient(
 )
 
 async function main() {
-  const { data, error } = await supabase.from('leads').select('meeting_status')
+  const { data, error } = await supabase.from('engaged_leads').select('meeting_status')
   if (error) throw error
   const set = Array.from(new Set((data ?? []).map(r => String(r.meeting_status)))).sort()
   console.log('MEETING_STATUS VALUES:', set)

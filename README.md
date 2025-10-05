@@ -1,13 +1,12 @@
 # Door2Door V2 - Next.js Web App
 
-A modern web application built with Next.js, Supabase, ShadCN UI, and AI SDK.
+A modern web application built with Next.js, Supabase, and ShadCN UI.
 
 ## Tech Stack
 
 - **Framework**: Next.js 15 with App Router
 - **Database**: Supabase
 - **UI Components**: ShadCN UI
-- **AI Integration**: Vercel AI SDK
 - **Styling**: Tailwind CSS
 - **Deployment**: Vercel
 
@@ -33,9 +32,6 @@ Create a `.env.local` file in the root directory and add your configuration:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# AI Configuration (if needed)
-# OPENAI_API_KEY=your_openai_api_key
-# ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 ### Supabase Setup

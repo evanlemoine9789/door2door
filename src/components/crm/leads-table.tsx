@@ -35,15 +35,35 @@ export interface Lead {
   city: string | null
   state: string | null
   lastUpdated: string
+  callDate: string | null
 }
 
 interface LeadsTableProps {
   leads: Lead[]
   onLeadSelect: (lead: Lead) => void
   selectedLeadId?: string
+  // Pagination props
+  currentPage?: number
+  totalPages?: number
+  totalLeads?: number
+  pageSize?: number
+  onPageChange?: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
+  loading?: boolean
 }
 
-export function LeadsTable({ leads, onLeadSelect, selectedLeadId }: LeadsTableProps) {
+export function LeadsTable({ 
+  leads, 
+  onLeadSelect, 
+  selectedLeadId,
+  currentPage = 1,
+  totalPages = 1,
+  totalLeads = 0,
+  pageSize = 50,
+  onPageChange,
+  onPageSizeChange,
+  loading = false
+}: LeadsTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusValue>("all")
   const [sortDir, setSortDir] = useState<'asc' | 'desc' | undefined>(undefined)
@@ -209,9 +229,52 @@ export function LeadsTable({ leads, onLeadSelect, selectedLeadId }: LeadsTablePr
         </Table>
       </div>
 
+      {/* Pagination Controls */}
+      {onPageChange && onPageSizeChange && (
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages} ({totalLeads} total leads)
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => onPageSizeChange(parseInt(e.target.value))}
+                disabled={loading}
+                className="text-sm border border-border rounded px-2 py-1 bg-background"
+              >
+                <option value={25}>25 per page</option>
+                <option value={50}>50 per page</option>
+                <option value={100}>100 per page</option>
+                <option value={200}>200 per page</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || loading}
+              className="px-3 py-1 text-sm border border-border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="px-3 py-1 text-sm text-muted-foreground">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || loading}
+              className="px-3 py-1 text-sm border border-border rounded hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Results count */}
       <div className="text-sm text-muted-foreground">
-        Showing {sortedLeads.length} of {leads.length} leads
+        Showing {sortedLeads.length} of {totalLeads} leads
       </div>
     </div>
   )

@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Users, LogOut, Phone } from "lucide-react"
+import { LayoutDashboard, Users, LogOut, Phone, Snowflake, Flame, Search, Map } from "lucide-react"
 
 import {
   Sidebar,
@@ -24,7 +24,7 @@ type NavItem = {
   title: string
   href: string
   icon: any
-  children?: { title: string; href: string }[]
+  children?: { title: string; href: string; icon?: any }[]
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -34,18 +34,28 @@ const NAV_ITEMS: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
+    title: "Generate Leads",
+    href: "/generate-leads",
+    icon: Search,
+  },
+  {
     title: "Leads",
     href: "/crm/leads",
     icon: Users,
     children: [
-      { title: 'Cold Call', href: '/crm/leads' },
-      { title: 'Cold Email', href: '/crm/leads/cold-email' }
+      { title: 'Cold Leads', href: '/crm/leads/cold-leads', icon: Snowflake },
+      { title: 'Engaged Leads', href: '/crm/leads', icon: Flame }
     ]
   },
   {
     title: "Dialer",
     href: "/dialer",
     icon: Phone,
+  },
+  {
+    title: "Map",
+    href: "/map",
+    icon: Map,
   },
 ]
 
@@ -99,11 +109,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
                           {item.children.map((child) => {
                             const isActive = pathname === child.href
+                            const ChildIcon = child.icon
                             
                             return (
                               <SidebarMenuSubItem key={child.href}>
                                 <SidebarMenuSubButton asChild isActive={isActive}>
                                   <Link href={child.href}>
+                                    {ChildIcon && <ChildIcon className="h-4 w-4" />}
                                     <span>{child.title}</span>
                                   </Link>
                                 </SidebarMenuSubButton>

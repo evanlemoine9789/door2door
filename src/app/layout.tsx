@@ -7,7 +7,6 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import ChatWidget from "@/components/ai/ChatWidget";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -62,7 +61,6 @@ export default function RootLayout({
         </ClientShell>
         </AuthProvider>
         <Toaster />
-        <ChatWidget />
       </body>
     </html>
   );

@@ -59,7 +59,9 @@ export function ColdCallsAreaChart() {
       }
     }
 
-    fetchData()
+    // Add a small delay to prevent excessive API calls
+    const timeoutId = setTimeout(fetchData, 100)
+    return () => clearTimeout(timeoutId)
   }, [timeRange])
 
   return (

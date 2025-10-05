@@ -5,52 +5,15 @@ import { Edit, Trash2, Save, X, Check } from "lucide-react"
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-// Helper functions for time conversion
-const convertTo24HourFormat = (time12Hour: string | null): string => {
-  if (!time12Hour) return ''
-  
-  try {
-    const [time, period] = time12Hour.split(' ')
-    const [hours, minutes] = time.split(':').map(Number)
-    
-    let hour24 = hours
-    if (period === 'PM' && hours !== 12) {
-      hour24 = hours + 12
-    } else if (period === 'AM' && hours === 12) {
-      hour24 = 0
-    }
-    
-    return `${hour24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-  } catch (error) {
-    console.error('Error converting to 24-hour format:', error)
-    return ''
-  }
-}
-
-const convertFrom24HourFormat = (time24Hour: string): string => {
-  if (!time24Hour) return ''
-  
-  try {
-    const [hours, minutes] = time24Hour.split(':').map(Number)
-    const period = hours >= 12 ? 'PM' : 'AM'
-    const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours
-    const displayMinutes = minutes.toString().padStart(2, '0')
-    
-    return `${displayHours}:${displayMinutes} ${period}`
-  } catch (error) {
-    console.error('Error converting from 24-hour format:', error)
-    return ''
-  }
-}
-
-interface LeadDetailsProps {
+interface LeadDetailsFlexibleProps {
   lead: Lead | null
   onEdit: (lead: Lead) => void
   onDelete: (leadId: string) => void
   onLeadUpdate?: (updatedLead: Lead) => void
+  tableName: 'engaged_leads' | 'cold_leads'
 }
 
-export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetailsProps) {
+export function LeadDetailsFlexible({ lead, onEdit, onDelete, onLeadUpdate, tableName }: LeadDetailsFlexibleProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [saving, setSaving] = useState(false)
@@ -74,9 +37,15 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
     if (!dateString) return "N/A"
     if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const [y, m, d] = dateString.split('-').map(Number)
-      return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+      const month = String(m).padStart(2, '0')
+      const day = String(d).padStart(2, '0')
+      return `${month}-${day}-${y}`
     }
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+    const date = new Date(dateString)
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const year = date.getFullYear()
+    return `${month}-${day}-${year}`
   }
 
   const validateAndFormatDate = (dateString: string): string | null => {
@@ -139,26 +108,41 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
 
     setSaving(true)
     try {
+      // Build update object based on table type
+      const updateData = tableName === 'cold_leads' ? {
+        company_name:  editingLead.company,
+        owner_name:    editingLead.contactName,
+        practice_type: editingLead.contactRole,
+        website:       editingLead.url,
+        phone:         editingLead.phoneNumber,
+        address:       editingLead.address,
+        city:          editingLead.city,
+        state:         editingLead.state,
+        call_date:     editingLead.callDate,
+        updated_at:    new Date().toISOString(),
+      } : {
+        company_name:  editingLead.company,
+        owner_name:    editingLead.contactName,
+        practice_type: editingLead.contactRole,
+        url:           editingLead.url,
+        phone_number:  editingLead.phoneNumber,
+        meeting_status: mapStatusToSupabase(editingLead.meetingStatus),
+        meeting_date:   validatedMeetingDate,   // DATE in DB
+        time:           editingLead.meetingTime, // "time" is text in DB
+        date_booked:    validatedDateBooked,    // DATE in DB
+        assigned_rep:   editingLead.rep,
+        booked_with:    editingLead.bookedWith,
+        call_recording: editingLead.callRecording,
+        address:        editingLead.address,
+        city:           editingLead.city,
+        state:          editingLead.state,
+        call_date:      editingLead.callDate,
+        updated_at:     new Date().toISOString(), // ensure it bumps
+      }
+
       const { data, error } = await supabase
-        .from('engaged_leads')
-        .update({
-          company_name:  editingLead.company,
-          owner_name:    editingLead.contactName,
-          practice_type: editingLead.contactRole,
-          url:           editingLead.url,
-          phone_number:  editingLead.phoneNumber,
-          meeting_status: mapStatusToSupabase(editingLead.meetingStatus),
-          meeting_date:   validatedMeetingDate,   // DATE in DB
-          meeting_time:   convertTo24HourFormat(editingLead.meetingTime), // Convert to 24-hour format for DB
-          date_booked:    validatedDateBooked,    // DATE in DB
-          assigned_rep:   editingLead.rep,
-          booked_with:    editingLead.bookedWith,
-          call_recording: editingLead.callRecording,
-          address:        editingLead.address,
-          city:           editingLead.city,
-          state:          editingLead.state,
-          updated_at:     new Date().toISOString(), // ensure it bumps
-        })
+        .from(tableName)
+        .update(updateData)
         .eq('id', editingLead.id)
         .select()
         .single()
@@ -167,14 +151,33 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
 
       // Trust the DB row we just wrote
       const row = data as any
-      const updatedLead: Lead = {
+      const updatedLead: Lead = tableName === 'cold_leads' ? {
+        id:           row.id,
+        company:      row.company_name,
+        contactName:  row.owner_name,
+        contactRole:  row.practice_type,
+        meetingStatus: 'pending' as const,
+        meetingDate:   null,
+        meetingTime:   null,
+        dateBooked:    '',
+        phoneNumber:   row.phone ?? '',
+        url:           row.website ?? '',
+        rep:           '',
+        bookedWith:    '',
+        callRecording: '',
+        address:       row.address ?? null,
+        city:          row.city ?? null,
+        state:         row.state ?? null,
+        callDate:      row.call_date ?? null,
+        lastUpdated:   row.updated_at,
+      } : {
         id:           row.id,
         company:      row.company_name,
         contactName:  row.owner_name,
         contactRole:  row.practice_type,
         meetingStatus: row.meeting_status as Lead['meetingStatus'],
         meetingDate:   row.meeting_date ?? null,
-        meetingTime:   row.meeting_time ?? '',
+        meetingTime:   row.time ?? '',
         dateBooked:    row.date_booked ?? '',
         phoneNumber:   row.phone_number ?? '',
         url:           row.url ?? '',
@@ -184,6 +187,7 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
         address:       row.address ?? null,
         city:          row.city ?? null,
         state:         row.state ?? null,
+        callDate:      row.call_date ?? null,
         lastUpdated:   row.updated_at,
       }
 
@@ -203,7 +207,7 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
     if (!currentLead) return
     if (!confirm(`Delete ${currentLead.company}? This cannot be undone.`)) return
     try {
-      const { error } = await supabase.from('leads').delete().eq('id', currentLead.id)
+      const { error } = await supabase.from(tableName).delete().eq('id', currentLead.id)
       if (error) throw error
       onDelete(currentLead.id)
     } catch (err) {
@@ -499,10 +503,11 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
                 <div className="mt-1">
                   {isEditing ? (
                     <input
-                      type="time"
-                      value={convertTo24HourFormat(currentLead.meetingTime) || ''}
-                      onChange={(e) => setEditingLead({ ...currentLead, meetingTime: convertFrom24HourFormat(e.target.value) })}
+                      type="text"
+                      value={currentLead.meetingTime || ''}
+                      onChange={(e) => setEditingLead({ ...currentLead, meetingTime: e.target.value })}
                       className="w-full text-xs bg-transparent border-b border-transparent focus:border-primary focus:outline-none px-1 py-0.5"
+                      placeholder="Enter meeting time (e.g., 2:00 PM)"
                     />
                   ) : (
                     <p className="text-xs text-foreground">{currentLead.meetingTime || '–'}</p>

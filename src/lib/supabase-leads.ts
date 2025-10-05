@@ -1,5 +1,13 @@
-import { supabase } from '@/lib/supabase'
 import { Lead } from '@/components/crm/leads-table'
+import { 
+  genericFetch, 
+  genericFetchById, 
+  genericCreate, 
+  genericUpdate, 
+  genericDelete, 
+  genericSearch, 
+  genericStats 
+} from '@/lib/supabase-crud-utils'
 
 // Database types that match our Supabase schema
 export interface DatabaseLead {
@@ -63,20 +71,37 @@ const mapLeadToDatabaseLead = (lead: Omit<Lead, 'id'>): Omit<DatabaseLead, 'id' 
   state: lead.state
 })
 
+// Convert component lead updates to database lead updates
+const mapLeadUpdatesToDatabaseLead = (updates: Partial<Omit<Lead, 'id'>>): Partial<DatabaseLead> => {
+  const dbUpdates: Partial<DatabaseLead> = {}
+  
+  if (updates.company !== undefined) dbUpdates.company = updates.company
+  if (updates.contactName !== undefined) dbUpdates.contact_name = updates.contactName
+  if (updates.contactRole !== undefined) dbUpdates.contact_role = updates.contactRole
+  if (updates.meetingStatus !== undefined) dbUpdates.meeting_status = updates.meetingStatus
+  if (updates.meetingDate !== undefined) dbUpdates.meeting_date = updates.meetingDate
+  if (updates.meetingTime !== undefined) dbUpdates.meeting_time = updates.meetingTime
+  if (updates.dateBooked !== undefined) dbUpdates.date_booked = updates.dateBooked
+  if (updates.phoneNumber !== undefined) dbUpdates.phone_number = updates.phoneNumber
+  if (updates.url !== undefined) dbUpdates.url = updates.url
+  if (updates.rep !== undefined) dbUpdates.rep = updates.rep
+  if (updates.bookedWith !== undefined) dbUpdates.booked_with = updates.bookedWith
+  if (updates.callRecording !== undefined) dbUpdates.call_recording = updates.callRecording
+  if (updates.address !== undefined) dbUpdates.address = updates.address
+  if (updates.city !== undefined) dbUpdates.city = updates.city
+  if (updates.state !== undefined) dbUpdates.state = updates.state
+  
+  return dbUpdates
+}
+
 // Fetch all leads
 export async function fetchLeads(): Promise<Lead[]> {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching leads:', error)
-      throw error
-    }
-
-    return data ? data.map(mapDatabaseLeadToLead) : []
+    const data = await genericFetch<DatabaseLead>('engaged_leads', {}, {
+      orderBy: 'created_at',
+      ascending: false
+    })
+    return data.map(mapDatabaseLeadToLead)
   } catch (error) {
     console.error('Error in fetchLeads:', error)
     throw error
@@ -86,17 +111,7 @@ export async function fetchLeads(): Promise<Lead[]> {
 // Fetch a single lead by ID
 export async function fetchLeadById(id: string): Promise<Lead | null> {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (error) {
-      console.error('Error fetching lead:', error)
-      throw error
-    }
-
+    const data = await genericFetchById<DatabaseLead>('engaged_leads', id)
     return data ? mapDatabaseLeadToLead(data) : null
   } catch (error) {
     console.error('Error in fetchLeadById:', error)
@@ -107,19 +122,11 @@ export async function fetchLeadById(id: string): Promise<Lead | null> {
 // Create a new lead
 export async function createLead(lead: Omit<Lead, 'id'>): Promise<Lead> {
   try {
-    const dbLead = mapLeadToDatabaseLead(lead)
-    
-    const { data, error } = await supabase
-      .from('leads')
-      .insert([dbLead])
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating lead:', error)
-      throw error
-    }
-
+    const data = await genericCreate<DatabaseLead, Omit<Lead, 'id'>>(
+      'engaged_leads', 
+      lead, 
+      mapLeadToDatabaseLead
+    )
     return mapDatabaseLeadToLead(data)
   } catch (error) {
     console.error('Error in createLead:', error)
@@ -130,37 +137,12 @@ export async function createLead(lead: Omit<Lead, 'id'>): Promise<Lead> {
 // Update an existing lead
 export async function updateLead(id: string, updates: Partial<Omit<Lead, 'id'>>): Promise<Lead> {
   try {
-    const dbUpdates: Partial<DatabaseLead> = {}
-    
-    // Map component fields to database fields
-    if (updates.company !== undefined) dbUpdates.company = updates.company
-    if (updates.contactName !== undefined) dbUpdates.contact_name = updates.contactName
-    if (updates.contactRole !== undefined) dbUpdates.contact_role = updates.contactRole
-    if (updates.meetingStatus !== undefined) dbUpdates.meeting_status = updates.meetingStatus
-    if (updates.meetingDate !== undefined) dbUpdates.meeting_date = updates.meetingDate
-    if (updates.meetingTime !== undefined) dbUpdates.meeting_time = updates.meetingTime
-    if (updates.dateBooked !== undefined) dbUpdates.date_booked = updates.dateBooked
-    if (updates.phoneNumber !== undefined) dbUpdates.phone_number = updates.phoneNumber
-    if (updates.url !== undefined) dbUpdates.url = updates.url
-    if (updates.rep !== undefined) dbUpdates.rep = updates.rep
-    if (updates.bookedWith !== undefined) dbUpdates.booked_with = updates.bookedWith
-    if (updates.callRecording !== undefined) dbUpdates.call_recording = updates.callRecording
-    if (updates.address !== undefined) dbUpdates.address = updates.address
-    if (updates.city !== undefined) dbUpdates.city = updates.city
-    if (updates.state !== undefined) dbUpdates.state = updates.state
-
-    const { data, error } = await supabase
-      .from('leads')
-      .update(dbUpdates)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating lead:', error)
-      throw error
-    }
-
+    const data = await genericUpdate<DatabaseLead, Partial<Omit<Lead, 'id'>>>(
+      'engaged_leads',
+      id,
+      updates,
+      mapLeadUpdatesToDatabaseLead
+    )
     return mapDatabaseLeadToLead(data)
   } catch (error) {
     console.error('Error in updateLead:', error)
@@ -171,15 +153,7 @@ export async function updateLead(id: string, updates: Partial<Omit<Lead, 'id'>>)
 // Delete a lead
 export async function deleteLead(id: string): Promise<void> {
   try {
-    const { error } = await supabase
-      .from('leads')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      console.error('Error deleting lead:', error)
-      throw error
-    }
+    await genericDelete('engaged_leads', id)
   } catch (error) {
     console.error('Error in deleteLead:', error)
     throw error
@@ -189,18 +163,13 @@ export async function deleteLead(id: string): Promise<void> {
 // Search leads by company or contact name
 export async function searchLeads(query: string): Promise<Lead[]> {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .or(`company.ilike.%${query}%,contact_name.ilike.%${query}%`)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error searching leads:', error)
-      throw error
-    }
-
-    return data ? data.map(mapDatabaseLeadToLead) : []
+    const data = await genericSearch<DatabaseLead>(
+      'engaged_leads',
+      ['company', 'contact_name'],
+      query,
+      { orderBy: 'created_at', ascending: false }
+    )
+    return data.map(mapDatabaseLeadToLead)
   } catch (error) {
     console.error('Error in searchLeads:', error)
     throw error
@@ -214,18 +183,12 @@ export async function filterLeadsByStatus(status: string): Promise<Lead[]> {
       return await fetchLeads()
     }
 
-    const { data, error } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('meeting_status', status)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error filtering leads by status:', error)
-      throw error
-    }
-
-    return data ? data.map(mapDatabaseLeadToLead) : []
+    const data = await genericFetch<DatabaseLead>(
+      'engaged_leads',
+      { meeting_status: status },
+      { orderBy: 'created_at', ascending: false }
+    )
+    return data.map(mapDatabaseLeadToLead)
   } catch (error) {
     console.error('Error in filterLeadsByStatus:', error)
     throw error
@@ -235,23 +198,14 @@ export async function filterLeadsByStatus(status: string): Promise<Lead[]> {
 // Get leads statistics
 export async function getLeadsStats() {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('meeting_status')
-
-    if (error) {
-      console.error('Error fetching leads stats:', error)
-      throw error
+    const stats = await genericStats<DatabaseLead>('engaged_leads', 'meeting_status')
+    
+    return {
+      total: Object.values(stats).reduce((sum, count) => sum + count, 0),
+      scheduled: stats.scheduled || 0,
+      ran: stats.ran || 0,
+      cancelled: stats.cancelled || 0
     }
-
-    const stats = {
-      total: data?.length || 0,
-      scheduled: data?.filter((lead: { meeting_status: string }) => lead.meeting_status === 'scheduled').length || 0,
-      ran: data?.filter((lead: { meeting_status: string }) => lead.meeting_status === 'ran').length || 0,
-      cancelled: data?.filter((lead: { meeting_status: string }) => lead.meeting_status === 'cancelled').length || 0
-    }
-
-    return stats
   } catch (error) {
     console.error('Error in getLeadsStats:', error)
     throw error

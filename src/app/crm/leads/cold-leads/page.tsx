@@ -1,18 +1,34 @@
 "use client"
 
 import { useState } from "react"
-import { LeadsTable, Lead } from "@/components/crm/leads-table"
+import { ColdLeadsTable, ColdLead } from "@/components/crm/cold-leads-table"
 import { LeadDetailsFlexible } from "@/components/crm/lead-details-flexible"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent } from "@/components/ui/drawer"
-import { useLeads } from "@/hooks/use-leads"
+import { useColdLeads } from "@/hooks/use-cold-leads"
+import { supabase } from "@/lib/supabase"
+import { toast } from 'sonner'
 
-export default function ColdCallLeadsPage() {
-  const { leads, loading, error, refreshLeads } = useLeads()
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+export default function ColdLeadsPage() {
+  const { 
+    leads, 
+    loading, 
+    error, 
+    refreshLeads,
+    currentPage,
+    pageSize,
+    totalPages,
+    totalLeads,
+    fetchLeads,
+    setPageSize,
+    filters,
+    updateFilters
+  } = useColdLeads()
+  const [selectedLead, setSelectedLead] = useState<ColdLead | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
 
-  const handleLeadSelect = (lead: Lead) => {
+  const handleLeadSelect = (lead: ColdLead) => {
     setSelectedLead(lead)
     setShowDetails(true)
   }
@@ -22,7 +38,7 @@ export default function ColdCallLeadsPage() {
     setSelectedLead(null)
   }
 
-  const handleEditLead = (lead: Lead) => {
+  const handleEditLead = (lead: ColdLead) => {
     // Refresh the leads data after editing
     refreshLeads()
     
@@ -41,11 +57,52 @@ export default function ColdCallLeadsPage() {
     refreshLeads()
   }
 
-  const handleLeadUpdate = (updatedLead: Lead) => {
+  const handleLeadUpdate = (updatedLead: ColdLead) => {
     // Update the selected lead with the new data
     setSelectedLead(updatedLead)
     // Refresh the leads list
     refreshLeads()
+  }
+
+  const handlePageChange = (newPage: number) => {
+    fetchLeads(newPage, pageSize)
+  }
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize)
+    fetchLeads(1, newPageSize) // Reset to page 1 when changing page size
+  }
+
+  const handleBulkDelete = async (leadIds: string[]) => {
+    try {
+      
+      // Delete leads from Supabase
+      const { error } = await supabase
+        .from('cold_leads')
+        .delete()
+        .in('id', leadIds)
+
+      if (error) {
+        console.error('❌ Error deleting cold leads:', error)
+        throw new Error(`Failed to delete leads: ${error.message}`)
+      }
+      
+      // Show success toast
+      toast.success(`Successfully deleted ${leadIds.length} lead${leadIds.length > 1 ? 's' : ''}`)
+      
+      // Refresh the leads list
+      refreshLeads()
+      
+      // Close details if the deleted lead was selected
+      if (selectedLead && leadIds.includes(selectedLead.id)) {
+        setShowDetails(false)
+        setSelectedLead(null)
+      }
+      
+    } catch (error) {
+      console.error('💥 Error in bulk delete:', error)
+      throw error // Re-throw to let the table handle the error display
+    }
   }
 
   // Show loading state
@@ -56,7 +113,7 @@ export default function ColdCallLeadsPage() {
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Loading leads...</p>
+              <p className="text-muted-foreground">Loading cold leads...</p>
             </div>
           </div>
         </div>
@@ -71,7 +128,7 @@ export default function ColdCallLeadsPage() {
         <div className="container mx-auto px-4 py-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <p className="text-red-500 mb-4">Error loading leads: {error}</p>
+              <p className="text-red-500 mb-4">Error loading cold leads: {error}</p>
               <Button onClick={refreshLeads} variant="outline">
                 Try Again
               </Button>
@@ -88,17 +145,29 @@ export default function ColdCallLeadsPage() {
         {/* Header */}
         <div className="mb-8">
           <div>
-            <h1 className="text-lg font-semibold mb-2 text-card-foreground">Engaged Leads</h1>
-            <p className="text-muted-foreground text-xs">Manage your engaged sales leads and customer relationships</p>
+            <h1 className="text-lg font-semibold mb-2 text-card-foreground">Cold Leads</h1>
+            <p className="text-muted-foreground text-xs">Manage your cold leads and customer relationships</p>
           </div>
         </div>
 
         {/* Main Content */}
         <div className="w-full">
-          <LeadsTable
+          <ColdLeadsTable
             leads={leads}
             onLeadSelect={handleLeadSelect}
             selectedLeadId={selectedLead?.id}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalLeads={totalLeads}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            loading={loading}
+            selectedLeadIds={selectedLeadIds}
+            onSelectionChange={setSelectedLeadIds}
+            onBulkDelete={handleBulkDelete}
+            filters={filters}
+            onFiltersChange={updateFilters}
           />
         </div>
 
@@ -111,7 +180,7 @@ export default function ColdCallLeadsPage() {
                 onEdit={handleEditLead}
                 onDelete={handleDeleteLead}
                 onLeadUpdate={handleLeadUpdate}
-                tableName="engaged_leads"
+                tableName="cold_leads"
               />
             )}
           </DrawerContent>
