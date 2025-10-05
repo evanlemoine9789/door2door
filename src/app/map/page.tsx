@@ -10,7 +10,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function MapPage() {
   const [geocodeData, setGeocodeData] = useState<GeocodeData[]>([])
@@ -20,6 +22,10 @@ export default function MapPage() {
   const [loadingGeocodeData, setLoadingGeocodeData] = useState(false)
   const [selectedLeads, setSelectedLeads] = useState<GeocodeData[]>([])
   const [isPracticeFilterOpen, setIsPracticeFilterOpen] = useState(false)
+  const [emailAddress, setEmailAddress] = useState('')
+  const [isOptimizing, setIsOptimizing] = useState(false)
+  const [optimizationMessage, setOptimizationMessage] = useState('')
+  const [optimizationError, setOptimizationError] = useState('')
 
   // Log selected leads changes for debugging
   useEffect(() => {
@@ -276,6 +282,88 @@ export default function MapPage() {
     })
   }
 
+  // Email validation function
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  // Handle route optimization
+  const handleOptimizeRoute = async () => {
+    // Clear previous messages
+    setOptimizationMessage('')
+    setOptimizationError('')
+
+    // Validation
+    if (selectedLeads.length < 2) {
+      setOptimizationError('Please select at least 2 leads for route optimization.')
+      return
+    }
+
+    if (!emailAddress.trim()) {
+      setOptimizationError('Please enter your email address.')
+      return
+    }
+
+    if (!validateEmail(emailAddress)) {
+      setOptimizationError('Please enter a valid email address.')
+      return
+    }
+
+    setIsOptimizing(true)
+
+    try {
+      // Prepare the data as JSON
+      const routeData = {
+        email: emailAddress.trim(),
+        leads: selectedLeads.map(lead => ({
+          business_name: lead.cold_leads?.company_name || 'Unknown Business',
+          owner_name: lead.cold_leads?.owner_name || 'Unknown Owner',
+          address: lead.address || 'No address',
+          latitude: lead.latitude,
+          longitude: lead.longitude
+        }))
+      }
+
+      console.log('🗺️ Sending route optimization request:', routeData)
+
+      // Get the webhook URL from environment variables
+      const webhookUrl = process.env.NEXT_PUBLIC_N8N_ROUTE_OPTIMIZATION_WEBHOOK_URL
+
+      if (!webhookUrl) {
+        throw new Error('N8N webhook URL not configured')
+      }
+
+      // Send POST request to N8N webhook
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(routeData)
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('🗺️ Route optimization response:', result)
+
+      setOptimizationMessage(`Route optimization request sent successfully! You'll receive an email at ${emailAddress} with your optimized route.`)
+      
+      // Clear the form
+      setEmailAddress('')
+      setSelectedLeads([])
+
+    } catch (error) {
+      console.error('🗺️ Route optimization error:', error)
+      setOptimizationError('Failed to send route optimization request. Please try again.')
+    } finally {
+      setIsOptimizing(false)
+    }
+  }
+
   return (
     <div className="h-screen flex flex-col">
       {/* Compact header */}
@@ -327,6 +415,21 @@ export default function MapPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Deselect All Button */}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">
+                      {selectedPracticeTypes.size} of {uniquePracticeTypes.length} selected
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedPracticeTypes(new Set())}
+                      className="text-xs h-7 px-2 text-muted-foreground hover:text-card-foreground border-border hover:border-border bg-card"
+                    >
+                      Deselect All
+                    </Button>
+                  </div>
+                  
                   <ScrollArea className="h-[300px] pr-2">
                     <div className="space-y-2">
                       {uniquePracticeTypes.map((practiceType) => (
@@ -426,6 +529,61 @@ export default function MapPage() {
                     ))}
                   </div>
                 </ScrollArea>
+                
+                {/* Route Optimization Form */}
+                {selectedLeads.length >= 2 && (
+                  <div className="pt-4 border-t border-border">
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor="email" className="text-sm font-medium text-card-foreground">
+                          Email Address
+                        </Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          placeholder="your@email.com"
+                          value={emailAddress}
+                          onChange={(e) => setEmailAddress(e.target.value)}
+                          className="mt-1 bg-card border-border text-card-foreground placeholder:text-muted-foreground"
+                        />
+                      </div>
+                      
+                      <Button
+                        onClick={handleOptimizeRoute}
+                        disabled={isOptimizing || !emailAddress.trim()}
+                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                      >
+                        {isOptimizing ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
+                            Optimizing Route...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-2" />
+                            Optimize & Send Route
+                          </>
+                        )}
+                      </Button>
+                      
+                      {/* Success Message */}
+                      {optimizationMessage && (
+                        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                          <p className="text-sm text-green-800">{optimizationMessage}</p>
+                        </div>
+                      )}
+                      
+                      {/* Error Message */}
+                      {optimizationError && (
+                        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                          <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                          <p className="text-sm text-red-800">{optimizationError}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
