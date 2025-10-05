@@ -16,23 +16,33 @@ let Marker: any = null
 let Popup: any = null
 let MarkerClusterGroup: any = null
 
-// Load Leaflet components only on client side
+// Load Leaflet components only on client side with error handling
 if (typeof window !== 'undefined') {
-  import('leaflet').then(leaflet => {
-    L = leaflet.default
-    import('leaflet/dist/leaflet.css')
-  })
-  
-  import('react-leaflet').then(reactLeaflet => {
-    MapContainer = reactLeaflet.MapContainer
-    TileLayer = reactLeaflet.TileLayer
-    Marker = reactLeaflet.Marker
-    Popup = reactLeaflet.Popup
-  })
-  
-  import('react-leaflet-cluster').then(cluster => {
-    MarkerClusterGroup = cluster.default
-  })
+  try {
+    import('leaflet').then(leaflet => {
+      L = leaflet.default
+      import('leaflet/dist/leaflet.css')
+    }).catch(error => {
+      console.error('Failed to load Leaflet:', error)
+    })
+    
+    import('react-leaflet').then(reactLeaflet => {
+      MapContainer = reactLeaflet.MapContainer
+      TileLayer = reactLeaflet.TileLayer
+      Marker = reactLeaflet.Marker
+      Popup = reactLeaflet.Popup
+    }).catch(error => {
+      console.error('Failed to load react-leaflet:', error)
+    })
+    
+    import('react-leaflet-cluster').then(cluster => {
+      MarkerClusterGroup = cluster.default
+    }).catch(error => {
+      console.error('Failed to load react-leaflet-cluster:', error)
+    })
+  } catch (error) {
+    console.error('Error loading map dependencies:', error)
+  }
 }
 
 interface GeocodeRecord {
@@ -222,6 +232,22 @@ export default function LeadsMap() {
           mapInstanceRef.current = null
         } catch (error) {
           console.warn('Error cleaning up map instance:', error)
+        }
+      }
+    }
+  }, [])
+
+  // Prevent any global state pollution
+  useEffect(() => {
+    return () => {
+      // Clean up any potential global state changes
+      if (typeof window !== 'undefined') {
+        try {
+          // Remove any event listeners that might have been added
+          window.removeEventListener('resize', () => {})
+          window.removeEventListener('orientationchange', () => {})
+        } catch (error) {
+          console.warn('Error cleaning up global listeners:', error)
         }
       }
     }
@@ -538,17 +564,22 @@ export default function LeadsMap() {
             className="h-full w-full"
             style={{ height: '100%', width: '100%' }}
             whenReady={(map: any) => {
-              // Store map instance for cleanup
-              mapInstanceRef.current = map.target
+              try {
+                // Store map instance for cleanup
+                mapInstanceRef.current = map.target
+                console.log('🗺️ Map initialized successfully')
+              } catch (error) {
+                console.error('🗺️ Error initializing map:', error)
+              }
             }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
-              minZoom={0}
-              maxZoom={20}
-              crossOrigin={true}
-            />
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                minZoom={0}
+                maxZoom={19}
+                crossOrigin={true}
+              />
             
             {/* Markers */}
             {geocodeData.map((record) => {

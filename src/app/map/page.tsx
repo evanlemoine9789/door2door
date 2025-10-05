@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { Loader2 } from "lucide-react"
+import ErrorBoundary from '@/components/ui/error-boundary'
 
 // Dynamically import the entire map component to avoid SSR issues
 const MapComponent = dynamic(() => import('@/components/crm/leads-map'), { 
@@ -27,9 +28,11 @@ export default function MapPage() {
         </p>
       </div>
       
-      {/* Map Component */}
+      {/* Map Component wrapped in Error Boundary */}
       <div className="flex-1">
-        <MapComponent />
+        <ErrorBoundary>
+          <MapComponent />
+        </ErrorBoundary>
       </div>
     </div>
   )
