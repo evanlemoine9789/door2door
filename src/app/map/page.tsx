@@ -120,19 +120,21 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   document.head.appendChild(style)
 }
 
-// Fix for default markers in React-Leaflet and make them larger - only on client side
-if (typeof window !== 'undefined') {
-  delete (L.Icon.Default.prototype as any)._getIconUrl
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    iconSize: [40, 65],
-    iconAnchor: [20, 65],
-    popupAnchor: [0, -65],
-    shadowSize: [50, 64],
-    shadowAnchor: [20, 64]
-  })
+// Function to initialize Leaflet icons - called when L is available
+const initializeLeafletIcons = () => {
+  if (typeof window !== 'undefined' && L && L.Icon && L.Icon.Default) {
+    delete (L.Icon.Default.prototype as any)._getIconUrl
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+      iconSize: [40, 65],
+      iconAnchor: [20, 65],
+      popupAnchor: [0, -65],
+      shadowSize: [50, 64],
+      shadowAnchor: [20, 64]
+    })
+  }
 }
 
 // Color mapping for practice types - using distinct bright colors
@@ -401,6 +403,19 @@ export default function MapPage() {
   // Initialize client-side state
   useEffect(() => {
     setIsClient(true)
+    
+    // Initialize Leaflet icons when L becomes available
+    const initIcons = () => {
+      if (L && L.Icon && L.Icon.Default) {
+        initializeLeafletIcons()
+      } else {
+        // Retry after a short delay if L is not ready yet
+        setTimeout(initIcons, 100)
+      }
+    }
+    
+    // Start initialization
+    initIcons()
   }, [])
 
   // Handle current location found
