@@ -86,9 +86,11 @@ export default function GenerateLeadsPage() {
     setSubmitStatus({ type: null, message: "" })
 
     try {
+      console.log('🚀 Starting lead generation request with data:', formData)
       const result = await sendGenerateLeadsToWebhook(formData)
       
       if (result.success) {
+        console.log('✅ Lead generation request successful:', result.data)
         setSubmitStatus({
           type: 'success',
           message: 'Lead generation request sent successfully! Your N8N workflow has been triggered.'
@@ -100,12 +102,14 @@ export default function GenerateLeadsPage() {
           state: ""
         })
       } else {
+        console.error('❌ Lead generation request failed:', result.error)
         setSubmitStatus({
           type: 'error',
           message: `Failed to send request: ${result.error}`
         })
       }
     } catch (error) {
+      console.error('💥 Unexpected error in handleSubmit:', error)
       setSubmitStatus({
         type: 'error',
         message: 'An unexpected error occurred. Please try again.'

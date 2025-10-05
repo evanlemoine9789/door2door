@@ -7,6 +7,7 @@
 
 // N8N Webhook configuration
 const N8N_LEAD_AGENT_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_LEAD_AGENT_WEBHOOK_URL
+const N8N_WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL
 
 /**
  * Interface for the lead data payload sent to the webhook
@@ -170,6 +171,9 @@ export const sendGenerateLeadsToWebhook = async (
       throw new Error('N8N Lead Agent webhook URL not configured. Please check NEXT_PUBLIC_N8N_LEAD_AGENT_WEBHOOK_URL in .env.local')
     }
     
+    // Log the webhook URL (without exposing the full URL for security)
+    console.log('🔗 Using webhook URL:', N8N_LEAD_AGENT_WEBHOOK_URL ? `${N8N_LEAD_AGENT_WEBHOOK_URL.substring(0, 30)}...` : 'undefined')
+    
     // Prepare the payload
     const payload: GenerateLeadsPayload = {
       practice_type: formData.practiceType,
@@ -179,15 +183,23 @@ export const sendGenerateLeadsToWebhook = async (
       source: 'generate_leads_form'
     }
     
-    // Make POST request to N8N Lead Agent webhook
+    console.log('📤 Sending payload to webhook:', payload)
+    
+    // Make POST request to N8N Lead Agent webhook with timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+    
     const response = await fetch(N8N_LEAD_AGENT_WEBHOOK_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     // Handle response
     if (!response.ok) {
@@ -195,13 +207,15 @@ export const sendGenerateLeadsToWebhook = async (
       console.error('❌ Generate leads webhook request failed:', {
         status: response.status,
         statusText: response.statusText,
-        error: errorText
+        error: errorText,
+        url: N8N_LEAD_AGENT_WEBHOOK_URL
       })
-      throw new Error(`Webhook request failed: ${response.status} ${response.statusText}`)
+      throw new Error(`Webhook request failed: ${response.status} ${response.statusText} - ${errorText}`)
     }
     
     // Parse response
     const responseData = await response.json()
+    console.log('✅ Webhook response received:', responseData)
     
     return {
       success: true,
@@ -210,6 +224,22 @@ export const sendGenerateLeadsToWebhook = async (
     
   } catch (error) {
     console.error('💥 Error sending generate leads to webhook:', error)
+    
+    // Handle specific error types
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'Request timed out. Please try again.'
+        }
+      }
+      if (error.message.includes('Failed to fetch')) {
+        return {
+          success: false,
+          error: 'Network error: Unable to connect to the webhook service. Please check your internet connection and try again.'
+        }
+      }
+    }
     
     return {
       success: false,
