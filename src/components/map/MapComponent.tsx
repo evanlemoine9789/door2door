@@ -1,34 +1,53 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
 import { MapPin, Navigation, ExternalLink, X } from 'lucide-react'
 import { GeocodeData } from '@/types/geocode'
 
 // Dynamically import Leaflet components to avoid SSR issues
-const MapContainer = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.MapContainer })), { ssr: false })
+const MapContainer = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.MapContainer })), { 
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full bg-card rounded-lg border border-border flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-card-foreground text-lg mb-2">Loading Map...</div>
+        <div className="text-muted-foreground text-sm">Initializing map components</div>
+      </div>
+    </div>
+  )
+})
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.TileLayer })), { ssr: false })
 const Marker = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Marker })), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Popup })), { ssr: false })
 const useMap = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.useMap })), { ssr: false })
 const MarkerClusterGroup = dynamic(() => import('react-leaflet-cluster'), { ssr: false })
 
-// Import CSS only on client side
-if (typeof window !== 'undefined') {
+// Global flag to prevent multiple CSS imports
+let cssImported = false
+
+// Import CSS only once on client side
+if (typeof window !== 'undefined' && !cssImported) {
   import('leaflet/dist/leaflet.css')
   import('./MapComponent.css')
+  cssImported = true
 }
 
-// Fix for default markers in react-leaflet
+// Fix for default markers in react-leaflet - memoized to prevent recreation
 let L: any = null
 if (typeof window !== 'undefined') {
   L = require('leaflet')
 }
 
-// Create icons only on client side
+// Create icons only once and memoize them to prevent recreation
+let cachedIcons: { whiteIcon: any; selectedIcon: any; userLocationIcon: any } | null = null
+
 const createIcons = () => {
   if (!L) return { whiteIcon: null, selectedIcon: null, userLocationIcon: null }
+  
+  // Return cached icons if they exist
+  if (cachedIcons) return cachedIcons
   
   const whiteIcon = new L.Icon({
     iconUrl: 'data:image/svg+xml;base64,' + btoa(`
@@ -73,7 +92,9 @@ const createIcons = () => {
     shadowSize: [41, 41]
   })
 
-  return { whiteIcon, selectedIcon, userLocationIcon }
+  // Cache the icons
+  cachedIcons = { whiteIcon, selectedIcon, userLocationIcon }
+  return cachedIcons
 }
 
 // Custom cluster icon function with more opaque styling
@@ -129,21 +150,32 @@ const createClusterCustomIcon = function (cluster: any) {
   })
 }
 
-// Component to handle map centering
+// Component to handle map centering with better error handling
 function MapCenter({ center, zoom }: { center: [number, number]; zoom?: number }) {
   const map = useMap()
+  const [isInitialized, setIsInitialized] = useState(false)
   
   useEffect(() => {
-    if (center && map && typeof map.setView === 'function') {
+    if (center && map && typeof map.setView === 'function' && !isInitialized) {
       // Add a small delay to ensure map is fully initialized
       const timer = setTimeout(() => {
-        const targetZoom = zoom || map.getZoom()
-        map.setView(center, targetZoom)
+        try {
+          const targetZoom = zoom || map.getZoom()
+          map.setView(center, targetZoom)
+          setIsInitialized(true)
+        } catch (error) {
+          console.warn('Map center update failed:', error)
+        }
       }, 100)
       
       return () => clearTimeout(timer)
     }
-  }, [center, zoom, map])
+  }, [center, zoom, map, isInitialized])
+  
+  // Reset initialization flag when center changes significantly
+  useEffect(() => {
+    setIsInitialized(false)
+  }, [center])
   
   return null
 }
@@ -203,14 +235,30 @@ export function MapComponent({
   const [isLocating, setIsLocating] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
 
-  // Ensure we're on the client side
+  // Ensure we're on the client side with better error handling
   useEffect(() => {
-    setIsClient(true)
+    try {
+      setIsClient(true)
+    } catch (error) {
+      console.error('Error initializing map component:', error)
+      setMapError('Failed to initialize map component')
+    }
   }, [])
 
-  // Get icons only on client side
-  const { whiteIcon, selectedIcon, userLocationIcon } = isClient ? createIcons() : { whiteIcon: null, selectedIcon: null, userLocationIcon: null }
+  // Get icons only on client side with memoization
+  const icons = useMemo(() => {
+    if (!isClient) return { whiteIcon: null, selectedIcon: null, userLocationIcon: null }
+    try {
+      return createIcons()
+    } catch (error) {
+      console.error('Error creating map icons:', error)
+      return { whiteIcon: null, selectedIcon: null, userLocationIcon: null }
+    }
+  }, [isClient])
+
+  const { whiteIcon, selectedIcon, userLocationIcon } = icons
 
   // Function to get user's current location
   const handleLocationClick = () => {
@@ -255,6 +303,29 @@ export function MapComponent({
     )
   }
 
+  // Show error state if map initialization failed
+  if (mapError) {
+    return (
+      <div className={`${className} relative bg-card rounded-lg border border-border flex items-center justify-center`}>
+        <div className="text-center">
+          <div className="text-destructive text-lg mb-2">Map Error</div>
+          <div className="text-muted-foreground text-sm">{mapError}</div>
+          <Button 
+            onClick={() => {
+              setMapError(null)
+              setIsClient(false)
+              setTimeout(() => setIsClient(true), 100)
+            }}
+            className="mt-4"
+            size="sm"
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   // Show loading state until client-side rendering is ready
   if (!isClient || !whiteIcon || !userLocationIcon) {
     return (
@@ -286,6 +357,7 @@ export function MapComponent({
         zoom={zoom}
         style={{ height: '100%', width: '100%' }}
         className="rounded-lg border border-gray-700"
+        key={`map-${center[0]}-${center[1]}-${zoom}`} // Force re-render on significant changes
       >
         <TileLayer
           attribution='&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
