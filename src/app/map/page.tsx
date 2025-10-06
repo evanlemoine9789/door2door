@@ -487,7 +487,7 @@ export default function MapPage() {
                   <div className="space-y-2">
                     {selectedLeads.map((lead, index) => (
                       <div
-                        key={lead.cold_lead_id || index}
+                        key={`selected-${lead.cold_lead_id}-${lead.latitude}-${lead.longitude}-${index}`}
                         className="bg-card rounded-lg p-3 border border-border hover:border-border transition-colors"
                       >
                         <div className="flex items-start justify-between gap-2">

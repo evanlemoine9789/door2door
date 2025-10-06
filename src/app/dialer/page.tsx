@@ -1084,12 +1084,7 @@ export default function DialerPage() {
 
   return (
     <div className="min-h-screen bg-black *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-lg font-semibold mb-2 text-card-foreground">Dialer</h1>
-          <p className="text-muted-foreground text-xs">Filter and call your leads directly</p>
-        </div>
+      <div className="container mx-auto px-4 py-4">
 
         {/* Search and Filter Bar */}
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">

@@ -403,7 +403,7 @@ export function MapComponent({
              
              return (
                <Marker 
-                 key={lead.cold_lead_id || index}
+                 key={`${lead.cold_lead_id}-${lead.latitude}-${lead.longitude}-${index}`}
                  position={[lead.latitude, lead.longitude]}
                  icon={isSelected ? selectedIcon : whiteIcon}
                >
