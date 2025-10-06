@@ -1,4 +1,5 @@
 import { Lead } from '@/components/crm/leads-table'
+import { supabase } from '@/lib/supabase'
 import { 
   genericFetch, 
   genericFetchById, 
@@ -138,6 +139,18 @@ export async function updateColdLead(id: string, updates: Partial<Omit<Lead, 'id
 // Delete a cold lead
 export async function deleteColdLead(id: string): Promise<void> {
   try {
+    // First delete from lead_geocodes table to maintain referential integrity
+    const { error: geocodeError } = await supabase
+      .from('lead_geocodes')
+      .delete()
+      .eq('cold_lead_id', id)
+
+    if (geocodeError) {
+      console.error('Error deleting from lead_geocodes:', geocodeError)
+      // Continue with cold_leads deletion even if geocode deletion fails
+    }
+
+    // Then delete from cold_leads table
     await genericDelete('cold_leads', id)
   } catch (error) {
     console.error('Error in deleteColdLead:', error)
