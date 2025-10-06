@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin, Navigation } from 'lucide-react'
 
 export default function MapPage() {
   const [geocodeData, setGeocodeData] = useState<GeocodeData[]>([])
@@ -37,6 +37,11 @@ export default function MapPage() {
     coordinates: [number, number]
     address: string
   } | null>(null)
+  
+  // Location state
+  const [isLocating, setIsLocating] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
 
   // Log selected leads changes for debugging
   useEffect(() => {
@@ -361,6 +366,50 @@ export default function MapPage() {
     setSearchError('')
   }
 
+  // Function to get user's current location
+  const handleLocationClick = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser')
+      return
+    }
+
+    setIsLocating(true)
+    setLocationError(null)
+    setSearchError('') // Clear any search errors
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        const newCenter: [number, number] = [latitude, longitude]
+        setUserLocation(newCenter)
+        setMapCenter(newCenter)
+        setMapZoom(15) // Zoom level 15 provides closer view of user location and nearby practices
+        setIsLocating(false)
+      },
+      (error) => {
+        let errorMessage = 'Unable to get your location'
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied by user. Please enable location permissions in your browser settings.'
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable. Please check your GPS or network connection.'
+            break
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Please try again.'
+            break
+        }
+        setLocationError(errorMessage)
+        setIsLocating(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000, // Increased timeout for better accuracy
+        maximumAge: 30000 // Reduced cache time for more accurate location
+      }
+    )
+  }
+
   // Email validation function
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -683,23 +732,55 @@ export default function MapPage() {
                       className="pl-10 bg-white/95 backdrop-blur-sm border-border text-foreground placeholder:text-muted-foreground shadow-lg"
                     />
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={isSearching || !searchQuery.trim()}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-                  >
-                    {isSearching ? (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    ) : (
-                      <MapPin className="h-4 w-4" />
-                    )}
-                  </Button>
+                  <div className="flex gap-2">
+                    {/* Search Button */}
+                    <Button
+                      type="submit"
+                      disabled={isSearching || !searchQuery.trim()}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                      title="Search for address"
+                    >
+                      {isSearching ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <MapPin className="h-4 w-4" />
+                      )}
+                    </Button>
+                    
+                    {/* My Location Button */}
+                    <Button
+                      type="button"
+                      onClick={handleLocationClick}
+                      disabled={isLocating}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                      title="Find your location and zoom to nearby practices"
+                    >
+                      {isLocating ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <Navigation className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </form>
                 
                 {/* Search Error */}
                 {searchError && (
                   <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
                     {searchError}
+                  </div>
+                )}
+                
+                {/* Location Error */}
+                {locationError && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm flex items-center justify-between">
+                    <span>{locationError}</span>
+                    <button 
+                      onClick={() => setLocationError(null)}
+                      className="ml-2 text-red-600 hover:text-red-800 font-bold"
+                    >
+                      ×
+                    </button>
                   </div>
                 )}
               </div>
@@ -712,6 +793,7 @@ export default function MapPage() {
                 zoom={mapZoom}
                 searchResult={searchResult}
                 onClearSearch={clearSearchResult}
+                userLocation={userLocation}
               />
             </div>
           )}

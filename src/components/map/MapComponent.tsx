@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import { useMap } from 'react-leaflet'
 import { Button } from '@/components/ui/button'
-import { MapPin, Navigation, ExternalLink, X } from 'lucide-react'
+import { MapPin, ExternalLink, X } from 'lucide-react'
 import { GeocodeData } from '@/types/geocode'
 
 // Dynamically import Leaflet components to avoid SSR issues
@@ -21,7 +22,6 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => ({ defaul
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.TileLayer })), { ssr: false })
 const Marker = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Marker })), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Popup })), { ssr: false })
-const useMap = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.useMap })), { ssr: false })
 const MarkerClusterGroup = dynamic(() => import('react-leaflet-cluster'), { ssr: false })
 
 // Global flag to prevent multiple CSS imports
@@ -150,67 +150,35 @@ const createClusterCustomIcon = function (cluster: any) {
   })
 }
 
-// Component to handle map centering with better error handling
+// Component to handle map centering with smooth animation
 function MapCenter({ center, zoom }: { center: [number, number]; zoom?: number }) {
   const map = useMap()
-  const [isInitialized, setIsInitialized] = useState(false)
   
   useEffect(() => {
-    if (center && map && typeof map.setView === 'function' && !isInitialized) {
+    if (center && map && typeof map.setView === 'function') {
       // Add a small delay to ensure map is fully initialized
       const timer = setTimeout(() => {
         try {
           const targetZoom = zoom || map.getZoom()
-          map.setView(center, targetZoom)
-          setIsInitialized(true)
+          
+          // Always recenter when center prop changes - no duplicate prevention
+          // This ensures the location button works every time
+          map.flyTo(center, targetZoom, {
+            duration: 1.2, // Smooth animation
+            easeLinearity: 0.25
+          })
         } catch (error) {
           console.warn('Map center update failed:', error)
         }
-      }, 100)
+      }, 50) // Small delay for responsive updates
       
       return () => clearTimeout(timer)
     }
-  }, [center, zoom, map, isInitialized])
-  
-  // Reset initialization flag when center changes significantly
-  useEffect(() => {
-    setIsInitialized(false)
-  }, [center])
+  }, [center, zoom, map])
   
   return null
 }
 
-// Location button component
-function LocationButton({ 
-  onLocationClick, 
-  isLocating 
-}: { 
-  onLocationClick: () => void
-  isLocating: boolean 
-}) {
-  return (
-    <div className="absolute top-4 right-4 z-[1000]">
-      <Button
-        onClick={onLocationClick}
-        disabled={isLocating}
-        className="bg-card border-border text-card-foreground hover:bg-muted/50 shadow-lg"
-        size="sm"
-      >
-        {isLocating ? (
-          <>
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-card-foreground mr-2"></div>
-            Locating...
-          </>
-        ) : (
-          <>
-            <Navigation className="h-4 w-4 mr-2" />
-            My Location
-          </>
-        )}
-      </Button>
-    </div>
-  )
-}
 
 interface MapComponentProps {
   center?: [number, number]
@@ -224,6 +192,7 @@ interface MapComponentProps {
     address: string
   } | null
   onClearSearch?: () => void
+  userLocation?: [number, number] | null
 }
 
 export function MapComponent({ 
@@ -234,13 +203,9 @@ export function MapComponent({
   selectedLeads = [],
   onLeadSelection,
   searchResult = null,
-  onClearSearch
+  onClearSearch,
+  userLocation = null
 }: MapComponentProps) {
-  const [mapCenter, setMapCenter] = useState<[number, number]>(center)
-  const [mapZoom, setMapZoom] = useState<number>(zoom)
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
-  const [isLocating, setIsLocating] = useState(false)
-  const [locationError, setLocationError] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
 
@@ -267,48 +232,6 @@ export function MapComponent({
 
   const { whiteIcon, selectedIcon, userLocationIcon } = icons
 
-  // Function to get user's current location
-  const handleLocationClick = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by this browser')
-      return
-    }
-
-    setIsLocating(true)
-    setLocationError(null)
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        const newCenter: [number, number] = [latitude, longitude]
-        setUserLocation(newCenter)
-        setMapCenter(newCenter)
-        setMapZoom(15) // Zoom in closer to see nearby practices
-        setIsLocating(false)
-      },
-      (error) => {
-        let errorMessage = 'Unable to get your location'
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied by user'
-            break
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable'
-            break
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out'
-            break
-        }
-        setLocationError(errorMessage)
-        setIsLocating(false)
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000
-      }
-    )
-  }
 
   // Show error state if map initialization failed
   if (mapError) {
@@ -376,7 +299,7 @@ export function MapComponent({
         />
         
         {/* Map center controller */}
-        <MapCenter center={mapCenter} zoom={mapZoom} />
+        <MapCenter center={center} zoom={zoom} />
         
         {/* User location marker */}
         {userLocation && (
@@ -553,24 +476,6 @@ export function MapComponent({
           })}
         </MarkerClusterGroup>
       </MapContainer>
-      
-      {/* Location button */}
-      <LocationButton onLocationClick={handleLocationClick} isLocating={isLocating} />
-      
-      {/* Error message */}
-      {locationError && (
-        <div className="absolute bottom-4 right-4 z-[1000] max-w-xs">
-          <div className="bg-red-500 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
-            {locationError}
-            <button 
-              onClick={() => setLocationError(null)}
-              className="ml-2 text-red-200 hover:text-white"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
