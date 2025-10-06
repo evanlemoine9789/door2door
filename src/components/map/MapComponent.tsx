@@ -219,6 +219,11 @@ interface MapComponentProps {
   geocodeData?: GeocodeData[]
   selectedLeads?: GeocodeData[]
   onLeadSelection?: (lead: GeocodeData) => void
+  searchResult?: {
+    coordinates: [number, number]
+    address: string
+  } | null
+  onClearSearch?: () => void
 }
 
 export function MapComponent({ 
@@ -227,7 +232,9 @@ export function MapComponent({
   className = "h-full w-full",
   geocodeData = [],
   selectedLeads = [],
-  onLeadSelection
+  onLeadSelection,
+  searchResult = null,
+  onClearSearch
 }: MapComponentProps) {
   const [mapCenter, setMapCenter] = useState<[number, number]>(center)
   const [mapZoom, setMapZoom] = useState<number>(zoom)
@@ -381,6 +388,53 @@ export function MapComponent({
                   Lat: {userLocation[0].toFixed(6)}<br />
                   Lng: {userLocation[1].toFixed(6)}
                 </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Search result marker */}
+        {searchResult && (
+          <Marker 
+            position={searchResult.coordinates}
+            icon={L ? L.divIcon({
+              html: `
+                <div style="
+                  background: #ff4444;
+                  width: 24px;
+                  height: 24px;
+                  border-radius: 50%;
+                  border: 3px solid white;
+                  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  color: white;
+                  font-weight: bold;
+                  font-size: 14px;
+                ">
+                  📍
+                </div>
+              `,
+              className: 'search-result-marker',
+              iconSize: [24, 24],
+              iconAnchor: [12, 12]
+            }) : null}
+          >
+            <Popup>
+              <div className="p-2">
+                <div className="font-semibold text-gray-700 mb-1">📍 Search Result</div>
+                <div className="text-gray-600 text-sm mb-2">{searchResult.address}</div>
+                {onClearSearch && (
+                  <Button
+                    onClick={onClearSearch}
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    Clear Search
+                  </Button>
+                )}
               </div>
             </Popup>
           </Marker>

@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin } from 'lucide-react'
 
 export default function MapPage() {
   const [geocodeData, setGeocodeData] = useState<GeocodeData[]>([])
@@ -26,6 +26,17 @@ export default function MapPage() {
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationMessage, setOptimizationMessage] = useState('')
   const [optimizationError, setOptimizationError] = useState('')
+  
+  // Address search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [mapCenter, setMapCenter] = useState<[number, number]>([41.6032, -73.0877]) // Connecticut center
+  const [mapZoom, setMapZoom] = useState(9)
+  const [searchResult, setSearchResult] = useState<{
+    coordinates: [number, number]
+    address: string
+  } | null>(null)
 
   // Log selected leads changes for debugging
   useEffect(() => {
@@ -280,6 +291,74 @@ export default function MapPage() {
         return newSelection
       }
     })
+  }
+
+  // Address search function using OpenStreetMap Nominatim API
+  const searchAddress = async (address: string) => {
+    if (!address.trim()) return
+
+    setIsSearching(true)
+    setSearchError('')
+
+    try {
+      // Use OpenStreetMap Nominatim API for geocoding (free service)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'Door2Door-CRM/1.0'
+          }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to search address')
+      }
+
+      const data = await response.json()
+
+      if (data.length === 0) {
+        setSearchError('Address not found. Please try a different search term.')
+        return
+      }
+
+      const result = data[0]
+      const lat = parseFloat(result.lat)
+      const lon = parseFloat(result.lon)
+
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new Error('Invalid coordinates received')
+      }
+
+      // Update map center and zoom to the found location
+      setMapCenter([lat, lon])
+      setMapZoom(15) // Zoom in closer for address searches
+      
+      // Store the search result for the temporary pin
+      setSearchResult({
+        coordinates: [lat, lon],
+        address: result.display_name
+      })
+      
+      console.log('🗺️ Address found:', result.display_name, 'Coordinates:', [lat, lon])
+
+    } catch (error) {
+      console.error('Error searching address:', error)
+      setSearchError('Failed to search address. Please try again.')
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    searchAddress(searchQuery)
+  }
+
+  const clearSearchResult = () => {
+    setSearchResult(null)
+    setSearchQuery('')
+    setSearchError('')
   }
 
   // Email validation function
@@ -590,11 +669,51 @@ export default function MapPage() {
               </div>
             </div>
           ) : (
-            <MapComponent 
-              geocodeData={filteredGeocodeData} 
-              selectedLeads={selectedLeads}
-              onLeadSelection={handleLeadSelection}
-            />
+            <div className="h-full relative">
+              {/* Address Search Bar */}
+              <div className="absolute top-4 left-4 right-4 z-[1000]">
+                <form onSubmit={handleSearchSubmit} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                    <Input
+                      type="text"
+                      placeholder="Search for an address, city, or location..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 bg-white/95 backdrop-blur-sm border-border text-foreground placeholder:text-muted-foreground shadow-lg"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={isSearching || !searchQuery.trim()}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                  >
+                    {isSearching ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <MapPin className="h-4 w-4" />
+                    )}
+                  </Button>
+                </form>
+                
+                {/* Search Error */}
+                {searchError && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+                    {searchError}
+                  </div>
+                )}
+              </div>
+              
+              <MapComponent 
+                geocodeData={filteredGeocodeData} 
+                selectedLeads={selectedLeads}
+                onLeadSelection={handleLeadSelection}
+                center={mapCenter}
+                zoom={mapZoom}
+                searchResult={searchResult}
+                onClearSearch={clearSearchResult}
+              />
+            </div>
           )}
         </div>
       </div>
