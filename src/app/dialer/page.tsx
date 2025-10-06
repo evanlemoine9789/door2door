@@ -38,7 +38,8 @@ interface FilterState {
   selectedStates: string[]
   selectedCities: string[]
   selectedPracticeTypes: string[]
-  sortField: 'name' | 'practice' | 'city' | 'state' | 'practiceType'
+  selectedDispositions: string[]
+  sortField: 'name' | 'practice' | 'city' | 'state' | 'practiceType' | 'callDate'
   sortDir: 'asc' | 'desc' | undefined
 }
 
@@ -140,6 +141,7 @@ export default function DialerPage() {
     selectedStates: [],
     selectedCities: [],
     selectedPracticeTypes: [],
+    selectedDispositions: [],
     sortField: 'name',
     sortDir: undefined
   })
@@ -205,7 +207,7 @@ export default function DialerPage() {
     }, 500) // 500ms debounce
 
     return () => clearTimeout(timeoutId)
-  }, [filters.searchQuery, filters.selectedStates, filters.selectedCities, filters.selectedPracticeTypes, filters.sortField, filters.sortDir])
+  }, [filters.searchQuery, filters.selectedStates, filters.selectedCities, filters.selectedPracticeTypes, filters.selectedDispositions, filters.sortField, filters.sortDir])
 
   useEffect(() => {
     setMeetingDate("")
@@ -371,8 +373,8 @@ export default function DialerPage() {
       filters.selectedStates.length > 0 ||
       filters.selectedCities.length > 0 ||
       filters.selectedPracticeTypes.length > 0 ||
-      filters.sortDir !== undefined ||
-      filters.sortField !== 'name'
+      filters.selectedDispositions.length > 0 ||
+      filters.sortField === 'callDate'
     )
   }, [filters])
 
@@ -482,6 +484,11 @@ export default function DialerPage() {
           dataQuery = dataQuery.in('practice_type', activeFilters.selectedPracticeTypes)
         }
 
+        if (activeFilters.selectedDispositions.length > 0) {
+          countQuery = countQuery.in('call_status', activeFilters.selectedDispositions)
+          dataQuery = dataQuery.in('call_status', activeFilters.selectedDispositions)
+        }
+
         // Get total count for pagination
         const { count, error: countError } = await countQuery
 
@@ -530,6 +537,9 @@ export default function DialerPage() {
           case 'practiceType':
             sortField = 'practice_type'
             break
+          case 'callDate':
+            sortField = 'call_date'
+            break
         }
 
         if (activeFilters.sortDir) {
@@ -556,7 +566,7 @@ export default function DialerPage() {
             name: row.owner_name || '',
             practice: row.company_name || '',
             phone: row.phone_number || '',
-            lastCall: row.created_at ? new Date(row.created_at).toLocaleDateString('en-US', { 
+            lastCall: row.call_date ? new Date(row.call_date).toLocaleDateString('en-US', { 
               month: 'short', 
               day: 'numeric', 
               year: 'numeric' 
@@ -616,6 +626,7 @@ export default function DialerPage() {
       selectedStates: [],
       selectedCities: [],
       selectedPracticeTypes: [],
+      selectedDispositions: [],
       sortField: 'name',
       sortDir: undefined
     })
@@ -1150,7 +1161,12 @@ export default function DialerPage() {
                         <span className="font-medium">Practice Types:</span> {filters.selectedPracticeTypes.length ? filters.selectedPracticeTypes.join(', ') : '—'}
                       </li>
                       <li>
-                        <span className="font-medium">Sort:</span> {filters.sortDir ? `${filters.sortField} (${filters.sortDir})` : 'Default'}
+                        <span className="font-medium">Dispositions:</span> {filters.selectedDispositions.length ? filters.selectedDispositions.join(', ') : '—'}
+                      </li>
+                      <li>
+                        <span className="font-medium">Sort:</span> {filters.sortField === 'callDate' 
+                          ? `Call Date (${filters.sortDir === 'desc' ? 'Newest' : 'Oldest'})` 
+                          : 'Default'}
                       </li>
                     </ul>
                   </div>
@@ -1481,10 +1497,76 @@ export default function DialerPage() {
               </PopoverContent>
             </Popover>
 
-            {/* Results Count */}
-            <div className="text-sm text-muted-foreground">
-              {callers.length} of {dialerTotalLeads} leads (Page {dialerCurrentPage}/{dialerTotalPages})
-            </div>
+            {/* Disposition Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="bg-card border-border text-foreground hover:bg-accent"
+                >
+                  Disposition
+                  {filters.selectedDispositions.length > 0 && (
+                    <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                      {filters.selectedDispositions.length}
+                    </Badge>
+                  )}
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[280px] bg-popover border-border" align="end">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm text-foreground">Call Outcomes</h4>
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-2">
+                        {['No Connect', 'Not Booked', 'Booked', 'Do Not Call', 'Email'].map((disposition) => (
+                          <div key={disposition} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`disposition-${disposition}`}
+                              checked={filters.selectedDispositions.includes(disposition)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFilters(prev => ({
+                                    ...prev,
+                                    selectedDispositions: [...prev.selectedDispositions, disposition]
+                                  }))
+                                } else {
+                                  setFilters(prev => ({
+                                    ...prev,
+                                    selectedDispositions: prev.selectedDispositions.filter(d => d !== disposition)
+                                  }))
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`disposition-${disposition}`}
+                              className="text-sm text-foreground cursor-pointer flex-1"
+                            >
+                              {disposition}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  
+                  {filters.selectedDispositions.length > 0 && (
+                    <div className="pt-2 border-t border-border">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFilters(prev => ({ ...prev, selectedDispositions: [] }))}
+                        className="w-full text-xs"
+                      >
+                        Clear Selection
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+
           </div>
         </div>
 
@@ -1494,7 +1576,42 @@ export default function DialerPage() {
           <div className="col-span-4">
             <Card className="h-full">
               <CardHeader>
-                <CardTitle className="text-card-foreground">Leads to Call</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-card-foreground">Leads to Call</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setFilters(prev => {
+                        // If not currently sorting by call date, start with most recent (desc)
+                        if (prev.sortField !== 'callDate') {
+                          return {
+                            ...prev,
+                            sortField: 'callDate',
+                            sortDir: 'desc'
+                          }
+                        }
+                        // If already sorting by call date, toggle between desc and asc
+                        return {
+                          ...prev,
+                          sortDir: prev.sortDir === 'desc' ? 'asc' : 'desc'
+                        }
+                      })
+                    }}
+                    className={`h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 ${
+                      filters.sortField === 'callDate' ? 'text-primary bg-primary/10' : ''
+                    }`}
+                    title={filters.sortField === 'callDate' 
+                      ? (filters.sortDir === 'desc' ? 'Sort by oldest call date' : 'Sort by newest call date')
+                      : 'Sort by call date'
+                    }
+                  >
+                    {filters.sortField === 'callDate' 
+                      ? (filters.sortDir === 'desc' ? '↓' : '↑')
+                      : '↕'
+                    }
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="p-0 h-full">
                 {dialerLoading ? (
@@ -1755,19 +1872,9 @@ export default function DialerPage() {
                         
                         <div className="flex items-center gap-2 text-sm">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Added: {selectedCaller.lastCall}</span>
+                          <span className="text-muted-foreground">Last Call: {selectedCaller.lastCall}</span>
                         </div>
                         
-                        {selectedCaller.callDate && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">Last Call: {new Date(selectedCaller.callDate).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric', 
-                              year: 'numeric' 
-                            })}</span>
-                          </div>
-                        )}
                         
                         <div className="pt-4 space-y-2">
                           <Button
