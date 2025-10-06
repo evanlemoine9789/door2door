@@ -72,9 +72,9 @@ export default function CRMPage() {
   // Show loading state
   if (loading) {
     return (
-      <div className="h-[calc(100vh-4rem)] bg-black overflow-hidden">
-        <div className="container mx-auto px-4 py-4 h-full">
-          <div className="flex items-center justify-center h-full">
+      <div className="min-h-screen bg-black">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
               <p className="text-muted-foreground">Loading leads...</p>
@@ -88,9 +88,9 @@ export default function CRMPage() {
   // Show error state
   if (error) {
     return (
-      <div className="h-[calc(100vh-4rem)] bg-black overflow-hidden">
-        <div className="container mx-auto px-4 py-4 h-full">
-          <div className="flex items-center justify-center h-full">
+      <div className="min-h-screen bg-black">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <p className="text-red-500 mb-4">Error loading leads: {error}</p>
               <Button onClick={refreshLeads} variant="outline">
@@ -104,10 +104,10 @@ export default function CRMPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] bg-black *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs overflow-hidden">
-      <div className="container mx-auto px-4 py-4 h-full">
-        {/* Main Content - takes full height */}
-        <div className="w-full h-full">
+    <div className="min-h-screen bg-black *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
+      <div className="container mx-auto px-4 py-4">
+        {/* Main Content */}
+        <div className="w-full">
           <LeadsTable
             leads={leads}
             onLeadSelect={handleLeadSelect}
