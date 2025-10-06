@@ -365,20 +365,9 @@ export default function MapPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Compact header */}
-      <div className="flex-shrink-0 px-4 pt-4 pb-2">
-        <h1 className="text-2xl font-bold text-white mb-1">Map</h1>
-        <p className="text-gray-400 text-sm mb-1">
-          Interactive map showing all leads geographically distributed
-        </p>
-        <p className="text-gray-300 text-xs">
-          {loadingGeocodeData ? 'Loading geocoded leads...' : `Loaded ${geocodeData.length || 0} geocoded leads`}
-        </p>
-      </div>
-
-      {/* Main content area with sidebar and map - takes remaining height */}
-      <div className="flex gap-4 flex-1 px-4 pb-4">
+    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
+      {/* Main content area with sidebar and map - takes full height */}
+      <div className="flex gap-4 flex-1 px-4 py-4">
         {/* Left sidebar with collapsible practice filter and route selection */}
         <div className="w-80">
           <Card className="h-full">
@@ -594,7 +583,7 @@ export default function MapPage() {
         {/* Map takes up remaining space */}
         <div className="flex-1">
           {loadingGeocodeData ? (
-            <div className="h-[calc(100vh-200px)] bg-card rounded-lg border border-border flex items-center justify-center">
+            <div className="h-full bg-card rounded-lg border border-border flex items-center justify-center">
               <div className="text-center">
                 <div className="text-card-foreground text-lg mb-2">Loading Map Data...</div>
                 <div className="text-muted-foreground text-sm">Fetching all geocoded leads</div>
