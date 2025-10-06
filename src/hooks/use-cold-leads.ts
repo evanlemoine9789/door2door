@@ -160,7 +160,7 @@ export function useColdLeads(initialFilters?: FilterState) {
             meetingDate: null, // cold_leads doesn't have meeting_date
             meetingTime: null, // cold_leads doesn't have meeting_time
             dateBooked: '', // cold_leads doesn't have date_booked
-            phoneNumber: row.phone_number || '', // Updated to use phone_number
+            phoneNumber: row.phone_number || '',
             url: row.website || '',
             rep: '', // cold_leads doesn't have assigned_rep
             bookedWith: '', // cold_leads doesn't have booked_with

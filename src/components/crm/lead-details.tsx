@@ -5,43 +5,6 @@ import { Edit, Trash2, Save, X, Check } from "lucide-react"
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-// Helper functions for time conversion
-const convertTo24HourFormat = (time12Hour: string | null): string => {
-  if (!time12Hour) return ''
-  
-  try {
-    const [time, period] = time12Hour.split(' ')
-    const [hours, minutes] = time.split(':').map(Number)
-    
-    let hour24 = hours
-    if (period === 'PM' && hours !== 12) {
-      hour24 = hours + 12
-    } else if (period === 'AM' && hours === 12) {
-      hour24 = 0
-    }
-    
-    return `${hour24.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-  } catch (error) {
-    console.error('Error converting to 24-hour format:', error)
-    return ''
-  }
-}
-
-const convertFrom24HourFormat = (time24Hour: string): string => {
-  if (!time24Hour) return ''
-  
-  try {
-    const [hours, minutes] = time24Hour.split(':').map(Number)
-    const period = hours >= 12 ? 'PM' : 'AM'
-    const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours
-    const displayMinutes = minutes.toString().padStart(2, '0')
-    
-    return `${displayHours}:${displayMinutes} ${period}`
-  } catch (error) {
-    console.error('Error converting from 24-hour format:', error)
-    return ''
-  }
-}
 
 interface LeadDetailsProps {
   lead: Lead | null
@@ -149,7 +112,7 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
           phone_number:  editingLead.phoneNumber,
           meeting_status: mapStatusToSupabase(editingLead.meetingStatus),
           meeting_date:   validatedMeetingDate,   // DATE in DB
-          meeting_time:   convertTo24HourFormat(editingLead.meetingTime), // Convert to 24-hour format for DB
+          meeting_time:   editingLead.meetingTime, // "meeting_time" is text in DB
           date_booked:    validatedDateBooked,    // DATE in DB
           assigned_rep:   editingLead.rep,
           booked_with:    editingLead.bookedWith,
@@ -504,10 +467,11 @@ export function LeadDetails({ lead, onEdit, onDelete, onLeadUpdate }: LeadDetail
                 <div className="mt-1">
                   {isEditing ? (
                     <input
-                      type="time"
-                      value={convertTo24HourFormat(currentLead.meetingTime) || ''}
-                      onChange={(e) => setEditingLead({ ...currentLead, meetingTime: convertFrom24HourFormat(e.target.value) })}
+                      type="text"
+                      value={currentLead.meetingTime || ''}
+                      onChange={(e) => setEditingLead({ ...currentLead, meetingTime: e.target.value })}
                       className="w-full text-xs bg-transparent border-b border-transparent focus:border-primary focus:outline-none px-1 py-0.5"
+                      placeholder="Enter meeting time (e.g., 2:00 PM)"
                     />
                   ) : (
                     <p className="text-xs text-foreground">{currentLead.meetingTime || '–'}</p>

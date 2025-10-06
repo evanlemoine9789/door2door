@@ -97,6 +97,7 @@ export function useLeads() {
             address: row.address || null,
             city: row.city || null,
             state: row.state || null,
+            callDate: null, // engaged_leads doesn't have call_date field
             lastUpdated: row.updated_at ? new Date(row.updated_at).toISOString().split('T')[0] : ''
           }))
 
@@ -124,7 +125,7 @@ export function useLeads() {
 
   // Map Supabase meeting_status to the existing interface values
   const mapMeetingStatus = (status: string | null): Lead['meetingStatus'] => {
-    if (!status) return 'pending'
+    if (!status) return 'scheduled'
     
     switch (status.toLowerCase()) {
       case 'scheduled':
@@ -132,9 +133,9 @@ export function useLeads() {
       case 'cancelled':
         return 'cancelled'
       case 'ran':
-        return 'completed'
+        return 'ran'
       default:
-        return 'pending'
+        return 'scheduled'
     }
   }
 
