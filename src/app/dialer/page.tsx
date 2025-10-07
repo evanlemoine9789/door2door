@@ -485,8 +485,23 @@ export default function DialerPage() {
         }
 
         if (activeFilters.selectedDispositions.length > 0) {
-          countQuery = countQuery.in('call_status', activeFilters.selectedDispositions)
-          dataQuery = dataQuery.in('call_status', activeFilters.selectedDispositions)
+          // Separate "Not Called" from other dispositions
+          const hasNotCalled = activeFilters.selectedDispositions.includes('Not Called')
+          const otherDispositions = activeFilters.selectedDispositions.filter(d => d !== 'Not Called')
+          
+          if (hasNotCalled && otherDispositions.length > 0) {
+            // Both null and specific statuses
+            countQuery = countQuery.or(`call_status.is.null,call_status.in.(${otherDispositions.join(',')})`)
+            dataQuery = dataQuery.or(`call_status.is.null,call_status.in.(${otherDispositions.join(',')})`)
+          } else if (hasNotCalled) {
+            // Only null statuses
+            countQuery = countQuery.is('call_status', null)
+            dataQuery = dataQuery.is('call_status', null)
+          } else {
+            // Only specific statuses (no null)
+            countQuery = countQuery.in('call_status', otherDispositions)
+            dataQuery = dataQuery.in('call_status', otherDispositions)
+          }
         }
 
         // Get total count for pagination
@@ -1519,7 +1534,7 @@ export default function DialerPage() {
                     <h4 className="font-medium text-sm text-foreground">Call Outcomes</h4>
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {['No Connect', 'Not Booked', 'Booked', 'Do Not Call', 'Email'].map((disposition) => (
+                        {['Not Called', 'No Connect', 'Not Booked', 'Booked', 'Do Not Call', 'Email'].map((disposition) => (
                           <div key={disposition} className="flex items-center space-x-2">
                             <Checkbox
                               id={`disposition-${disposition}`}
