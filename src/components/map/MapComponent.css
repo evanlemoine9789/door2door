@@ -45,3 +45,34 @@
   background: transparent !important;
   border: none !important;
 }
+
+/* Hover preview tooltip styling */
+.hover-preview-tooltip .leaflet-tooltip-content {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.hover-preview-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.hover-preview-tooltip .leaflet-tooltip-top:before {
+  border-top-color: #1f2937 !important;
+}
+
+.hover-preview-tooltip .leaflet-tooltip-bottom:before {
+  border-bottom-color: #1f2937 !important;
+}
+
+.hover-preview-tooltip .leaflet-tooltip-left:before {
+  border-left-color: #1f2937 !important;
+}
+
+.hover-preview-tooltip .leaflet-tooltip-right:before {
+  border-right-color: #1f2937 !important;
+}

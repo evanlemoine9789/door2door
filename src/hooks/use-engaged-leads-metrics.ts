@@ -24,35 +24,38 @@ export function useEngagedLeadsMetrics() {
       setLoading(true)
       setError(null)
 
-      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+      // Get today's date in local timezone (not UTC)
+      const today = new Date().toLocaleDateString('en-CA') // Returns YYYY-MM-DD in local timezone
+
+      // Debug: Get all meetings first to see what we're working with
+      const { data: allMeetings, error: allMeetingsError } = await supabase
+        .from('engaged_leads')
+        .select('id, meeting_date, meeting_status')
+        .not('meeting_date', 'is', null)
+        .order('meeting_date', { ascending: true })
+
+      if (allMeetingsError) {
+        console.error('Error fetching all meetings:', allMeetingsError)
+        throw new Error('Failed to fetch meetings')
+      }
+
+      console.log('Today:', today)
+      console.log('Total meetings found:', allMeetings?.length || 0)
+      console.log('All meetings:', allMeetings)
 
       // Get upcoming meetings (meeting_date > today)
-      const { data: upcomingData, error: upcomingError } = await supabase
-        .from('engaged_leads')
-        .select('id, meeting_date')
-        .not('meeting_date', 'is', null)
-        .gte('meeting_date', today)
-
-      if (upcomingError) {
-        console.error('Error fetching upcoming meetings:', upcomingError)
-        throw new Error('Failed to fetch upcoming meetings')
-      }
-
-      const upcomingMeetings = upcomingData?.length || 0
+      const upcomingMeetings = allMeetings?.filter(meeting => 
+        meeting.meeting_date > today
+      ).length || 0
 
       // Get all meetings that are today or in the past (meeting_date <= today)
-      const { data: pastMeetingsData, error: pastMeetingsError } = await supabase
-        .from('engaged_leads')
-        .select('id, meeting_date')
-        .not('meeting_date', 'is', null)
-        .lte('meeting_date', today)
+      const meetingsPast = allMeetings?.filter(meeting => 
+        meeting.meeting_date <= today
+      ).length || 0
 
-      if (pastMeetingsError) {
-        console.error('Error fetching past meetings:', pastMeetingsError)
-        throw new Error('Failed to fetch past meetings')
-      }
-
-      const meetingsPast = pastMeetingsData?.length || 0
+      console.log('Upcoming meetings:', upcomingMeetings)
+      console.log('Meetings past:', meetingsPast)
+      console.log('Total should equal:', upcomingMeetings + meetingsPast)
 
       setMetrics({
         upcomingMeetings,

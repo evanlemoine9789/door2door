@@ -8,6 +8,7 @@ import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
 import { Calendar } from 'lucide-react';
 import { useJustCallMetrics, TimePeriod } from '@/hooks/use-justcall-metrics';
 import { ColdCallsAreaChart } from '@/components/charts/ColdCallsAreaChart';
+import { EngagedLeadsMetrics } from '@/components/dashboard/engaged-leads-metrics';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   CardAction,
@@ -158,6 +159,9 @@ export function JustCallMetrics() {
           </div>
         </div>
       )}
+
+      {/* Engaged Leads Metrics */}
+      <EngagedLeadsMetrics />
 
       {/* Cold Calls Daily Trend Chart */}
       <ColdCallsAreaChart />

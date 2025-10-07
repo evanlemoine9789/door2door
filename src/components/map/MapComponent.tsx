@@ -22,6 +22,7 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => ({ defaul
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.TileLayer })), { ssr: false })
 const Marker = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Marker })), { ssr: false })
 const Popup = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Popup })), { ssr: false })
+const Tooltip = dynamic(() => import('react-leaflet').then(mod => ({ default: mod.Tooltip })), { ssr: false })
 const MarkerClusterGroup = dynamic(() => import('react-leaflet-cluster'), { ssr: false })
 
 // Global flag to prevent multiple CSS imports
@@ -208,6 +209,7 @@ export function MapComponent({
 }: MapComponentProps) {
   const [isClient, setIsClient] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
+  const [openPopupId, setOpenPopupId] = useState<string | null>(null)
 
   // Ensure we're on the client side with better error handling
   useEffect(() => {
@@ -377,14 +379,42 @@ export function MapComponent({
         >
            {geocodeData.map((lead, index) => {
              const isSelected = selectedLeads.some(selectedLead => selectedLead.cold_lead_id === lead.cold_lead_id)
+             const leadId = `${lead.cold_lead_id}-${lead.latitude}-${lead.longitude}-${index}`
+             const isPopupOpen = openPopupId === leadId
              
              return (
                <Marker 
-                 key={`${lead.cold_lead_id}-${lead.latitude}-${lead.longitude}-${index}`}
+                 key={leadId}
                  position={[lead.latitude, lead.longitude]}
                  icon={isSelected ? selectedIcon : whiteIcon}
                >
-                <Popup>
+                {/* Hover Preview Tooltip - only show when popup is not open */}
+                {!isPopupOpen && (
+                  <Tooltip 
+                    permanent={false}
+                    direction="top"
+                    offset={[0, -10]}
+                    className="hover-preview-tooltip"
+                  >
+                    <div className="bg-gray-900 text-white p-3 rounded-lg shadow-lg min-w-[200px]">
+                      <div className="font-semibold text-sm text-white mb-1">
+                        {lead.cold_leads?.company_name || 'Unknown Business'}
+                      </div>
+                      <div className="text-xs text-gray-300">
+                        Owner: {lead.cold_leads?.owner_name || 'Unknown Owner'}
+                      </div>
+                    </div>
+                  </Tooltip>
+                )}
+                
+                <Popup 
+                  onOpen={() => {
+                    setOpenPopupId(leadId)
+                  }}
+                  onClose={() => {
+                    setOpenPopupId(null)
+                  }}
+                >
                   <div className="bg-gray-900 text-white p-4 min-w-[280px] rounded-lg shadow-lg">
                     
                     <div className="space-y-3">

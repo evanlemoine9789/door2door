@@ -59,9 +59,7 @@ export function EngagedLeadsMetrics() {
   const meetingsPastTrend = metrics.meetingsPast > 0 ? 12.5 : 0;
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-bold text-card-foreground">Engaged Leads</h2>
-      <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
+    <div className="*:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 gap-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs">
         
         {/* Upcoming Meetings Card */}
         <Card className="@container/card">
@@ -113,7 +111,6 @@ export function EngagedLeadsMetrics() {
           </CardFooter>
         </Card>
 
-      </div>
     </div>
   );
 }
