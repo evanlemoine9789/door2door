@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Phone, Building2, MapPin, Clock, User, ExternalLink, Search, ChevronDown, X, Save, Bookmark, MoreHorizontal, Trash2, Edit } from "lucide-react"
+import { Phone, Building2, MapPin, Clock, User, ExternalLink, Search, ChevronDown, X, Save, Bookmark, Trash2, Edit } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { JustCallDialer } from "@justcall/justcall-dialer-sdk"
 import { toast } from 'sonner'
@@ -353,7 +353,11 @@ export default function DialerPage() {
   }
 
   const applySavedSearch = (search: SavedSearch) => {
-    setFilters(search.filters)
+    // Ensure all filter properties exist (for backward compatibility with old saved searches)
+    setFilters({
+      ...search.filters,
+      selectedDispositions: search.filters.selectedDispositions || []
+    })
   }
 
   const deleteSavedSearch = (searchId: string) => {
@@ -1176,7 +1180,7 @@ export default function DialerPage() {
                         <span className="font-medium">Practice Types:</span> {filters.selectedPracticeTypes.length ? filters.selectedPracticeTypes.join(', ') : '—'}
                       </li>
                       <li>
-                        <span className="font-medium">Dispositions:</span> {filters.selectedDispositions.length ? filters.selectedDispositions.join(', ') : '—'}
+                        <span className="font-medium">Dispositions:</span> {filters.selectedDispositions?.length ? filters.selectedDispositions.join(', ') : '—'}
                       </li>
                       <li>
                         <span className="font-medium">Sort:</span> {filters.sortField === 'callDate' 
@@ -1232,11 +1236,10 @@ export default function DialerPage() {
                 ) : (
                   <div className="max-h-64 overflow-y-auto">
                     {savedSearches.map((search) => (
-                      <div key={search.id} className="flex items-center gap-2 px-2 py-1.5">
+                      <div key={search.id} className="flex items-center gap-1 px-1 py-0.5">
                         <DropdownMenuItem
-                          className="flex-1"
-                          onSelect={(event) => {
-                            event.preventDefault()
+                          className="flex-1 cursor-pointer"
+                          onClick={() => {
                             applySavedSearch(search)
                           }}
                         >
@@ -1249,32 +1252,17 @@ export default function DialerPage() {
                             </span>
                           </div>
                         </DropdownMenuItem>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem
-                              onSelect={(event) => {
-                                event.preventDefault()
-                                applySavedSearch(search)
-                              }}
-                            >
-                              Apply Filters
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={(event) => {
-                                event.preventDefault()
-                                deleteSavedSearch(search.id)
-                              }}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteSavedSearch(search.id)
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
                       </div>
                     ))}
                   </div>
