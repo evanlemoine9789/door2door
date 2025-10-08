@@ -993,38 +993,62 @@ export default function DialerPage() {
     // Format meeting time for Supabase time type (ensure HH:MM format)
     const formattedMeetingTime = meetingTime.includes(':') ? meetingTime : `${meetingTime}:00`
     
-    const engagedLeadData = {
-      // Core lead information from cold_leads
-      company_name: leadData.practice,
-      practice_type: leadData.practiceType || '',
-      owner_name: leadData.name,
-      phone_number: leadData.phone,
-      
-      // Meeting details
-      meeting_date: meetingDate,
-      meeting_time: formattedMeetingTime,
-      date_booked: new Date().toISOString().split('T')[0], // Today's date
-      meeting_status: 'scheduled',
-      
-      // Location information (if available from cold_leads)
-      city: leadData.city || null,
-      state: leadData.state || null,
-      address: leadData.address || null,
-      
-      // URL information from cold_leads
-      url: leadData.website || null,
-      
-      // Default values for engaged_leads specific fields
-      lead_source: 'Cold Call',
-      assigned_rep: null,
-      notes: `Converted from cold lead on ${new Date().toLocaleDateString()}`,
-      next_step: null,
-      credit: null,
-      booked_with: bookedWith || null,
-      call_recording: null
-    }
-    
     try {
+      // Get the current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.error('❌ Error getting user:', authError)
+        throw new Error('You must be logged in to schedule a meeting')
+      }
+      
+      // Fetch user_id and organization_id from user_profiles
+      const { data: userProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, organization_id')
+        .eq('id', user.id)
+        .single()
+      
+      if (profileError || !userProfile) {
+        console.error('❌ Error fetching user profile:', profileError)
+        throw new Error('Failed to fetch user profile')
+      }
+      
+      const engagedLeadData = {
+        // Core lead information from cold_leads
+        company_name: leadData.practice,
+        practice_type: leadData.practiceType || '',
+        owner_name: leadData.name,
+        phone_number: leadData.phone,
+        
+        // Meeting details
+        meeting_date: meetingDate,
+        meeting_time: formattedMeetingTime,
+        date_booked: new Date().toISOString().split('T')[0], // Today's date
+        meeting_status: 'scheduled',
+        
+        // Location information (if available from cold_leads)
+        city: leadData.city || null,
+        state: leadData.state || null,
+        address: leadData.address || null,
+        
+        // URL information from cold_leads
+        url: leadData.website || null,
+        
+        // Default values for engaged_leads specific fields
+        lead_source: 'Cold Call',
+        assigned_rep: null,
+        notes: `Converted from cold lead on ${new Date().toLocaleDateString()}`,
+        next_step: null,
+        credit: null,
+        booked_with: bookedWith || null,
+        call_recording: null,
+        
+        // Add user_id and organization_id from user_profiles
+        user_id: userProfile.id,
+        organization_id: userProfile.organization_id
+      }
+      
       // Check if lead already exists in engaged_leads by phone number
       const { data: existingLead, error: checkError } = await supabase
         .from('engaged_leads')
@@ -1043,6 +1067,8 @@ export default function DialerPage() {
             meeting_time: formattedMeetingTime,
             date_booked: new Date().toISOString().split('T')[0],
             booked_with: bookedWith || null,
+            user_id: userProfile.id,
+            organization_id: userProfile.organization_id,
             updated_at: new Date().toISOString()
           })
           .eq('id', existingLead.id)
