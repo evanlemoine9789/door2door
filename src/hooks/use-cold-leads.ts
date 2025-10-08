@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { ColdLead } from '@/components/crm/cold-leads-table'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useAuth } from '@/components/providers/auth-provider'
+import { supabase } from '@/lib/supabase'
 
 interface FilterState {
   searchQuery: string
@@ -17,9 +13,11 @@ interface FilterState {
 }
 
 export function useColdLeads(initialFilters?: FilterState) {
+  const { user } = useAuth()
   const [leads, setLeads] = useState<ColdLead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   
   // Filters state
   const [filters, setFilters] = useState<FilterState>(initialFilters || {
@@ -37,11 +35,78 @@ export function useColdLeads(initialFilters?: FilterState) {
   const [totalPages, setTotalPages] = useState(0)
   const [totalLeads, setTotalLeads] = useState(0)
 
+  // Fetch user's organization_id
   useEffect(() => {
-    fetchLeads(currentPage, pageSize, filters)
-  }, [filters])
+    async function fetchUserOrganization() {
+      if (!user) {
+        setOrganizationId(null)
+        setError('User not authenticated')
+        setLoading(false)
+        return
+      }
+
+      try {
+        console.log('🔍 Fetching organization for user:', user.id)
+        
+        const { data, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single()
+
+        console.log('📊 Profile query result:', { data, profileError })
+
+        if (profileError) {
+          console.error('❌ Error fetching user profile:', {
+            message: profileError.message,
+            details: profileError.details,
+            hint: profileError.hint,
+            code: profileError.code
+          })
+          setError(`Failed to fetch user organization: ${profileError.message || 'Unknown error'}`)
+          setLoading(false)
+          return
+        }
+
+        if (!data) {
+          console.warn('⚠️ No user profile found for user:', user.id)
+          setError('User profile not found. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        if (!data.organization_id) {
+          console.warn('⚠️ User has no organization_id:', user.id)
+          setError('User has no organization assigned. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        console.log('✅ Organization ID found:', data.organization_id)
+        setOrganizationId(data.organization_id)
+      } catch (err) {
+        console.error('💥 Exception in fetchUserOrganization:', err)
+        setError('Failed to fetch user organization')
+        setLoading(false)
+      }
+    }
+
+    fetchUserOrganization()
+  }, [user])
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchLeads(currentPage, pageSize, filters)
+    }
+  }, [filters, organizationId])
 
   const fetchLeads = async (page: number = 1, pageSize: number = 100, currentFilters?: FilterState) => {
+    // Don't fetch if we don't have an organization ID yet
+    if (!organizationId) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -53,9 +118,18 @@ export function useColdLeads(initialFilters?: FilterState) {
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
       try {
-        // Build the base query
-        let countQuery = supabase.from('cold_leads').select('*', { count: 'exact', head: true })
-        let dataQuery = supabase.from('cold_leads').select('*')
+        // Build the base query - exclude soft-deleted leads and filter by organization
+        let countQuery = supabase
+          .from('cold_leads')
+          .select('*', { count: 'exact', head: true })
+          .is('deleted_at', null)  // Only count non-deleted leads
+          .eq('organization_id', organizationId)  // Filter by organization
+        
+        let dataQuery = supabase
+          .from('cold_leads')
+          .select('*')
+          .is('deleted_at', null)  // Only fetch non-deleted leads
+          .eq('organization_id', organizationId)  // Filter by organization
 
         // Apply filters to both count and data queries
         if (activeFilters.searchQuery) {

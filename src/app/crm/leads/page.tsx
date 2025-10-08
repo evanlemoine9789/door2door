@@ -4,7 +4,7 @@ import { useState } from "react"
 import { LeadsTable, Lead } from "@/components/crm/leads-table"
 import { LeadDetailsFlexible } from "@/components/crm/lead-details-flexible"
 import { Button } from "@/components/ui/button"
-import { Drawer, DrawerContent } from "@/components/ui/drawer"
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { useLeads } from "@/hooks/use-leads"
 
 export default function ColdCallLeadsPage() {
@@ -105,6 +105,7 @@ export default function ColdCallLeadsPage() {
         {/* Lead Details Drawer */}
         <Drawer open={showDetails} onOpenChange={setShowDetails} direction="right">
           <DrawerContent className="!w-1/2 !max-w-none bg-background border-l border-border overflow-y-auto overflow-x-hidden">
+            <DrawerTitle className="sr-only">Lead Details</DrawerTitle>
             {selectedLead && (
               <LeadDetailsFlexible
                 lead={selectedLead}

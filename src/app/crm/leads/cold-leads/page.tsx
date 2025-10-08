@@ -4,7 +4,7 @@ import { useState } from "react"
 import { ColdLeadsTable, ColdLead } from "@/components/crm/cold-leads-table"
 import { LeadDetailsFlexible } from "@/components/crm/lead-details-flexible"
 import { Button } from "@/components/ui/button"
-import { Drawer, DrawerContent } from "@/components/ui/drawer"
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { useColdLeads } from "@/hooks/use-cold-leads"
 import { supabase } from "@/lib/supabase"
 import { toast } from 'sonner'
@@ -76,14 +76,14 @@ export default function ColdLeadsPage() {
   const handleBulkDelete = async (leadIds: string[]) => {
     try {
       
-      // Delete leads from Supabase
+      // Soft delete leads from Supabase (set deleted_at timestamp)
       const { error } = await supabase
         .from('cold_leads')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .in('id', leadIds)
 
       if (error) {
-        console.error('❌ Error deleting cold leads:', error)
+        console.error('❌ Error soft deleting cold leads:', error)
         throw new Error(`Failed to delete leads: ${error.message}`)
       }
       
@@ -166,6 +166,7 @@ export default function ColdLeadsPage() {
         {/* Lead Details Drawer */}
         <Drawer open={showDetails} onOpenChange={setShowDetails} direction="right">
           <DrawerContent className="!w-1/2 !max-w-none bg-background border-l border-border overflow-y-auto overflow-x-hidden">
+            <DrawerTitle className="sr-only">Lead Details</DrawerTitle>
             {selectedLead && (
               <LeadDetailsFlexible
                 lead={selectedLead}

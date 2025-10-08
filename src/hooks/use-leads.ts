@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import { Lead } from '@/components/crm/leads-table'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { useAuth } from '@/components/providers/auth-provider'
+import { supabase } from '@/lib/supabase'
 
 export function useLeads() {
+  const { user } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -18,11 +16,78 @@ export function useLeads() {
   const [totalPages, setTotalPages] = useState(0)
   const [totalLeads, setTotalLeads] = useState(0)
 
+  // Fetch user's organization_id
   useEffect(() => {
-    fetchLeads(currentPage, pageSize)
-  }, [])
+    async function fetchUserOrganization() {
+      if (!user) {
+        setOrganizationId(null)
+        setError('User not authenticated')
+        setLoading(false)
+        return
+      }
+
+      try {
+        console.log('🔍 Fetching organization for user:', user.id)
+        
+        const { data, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single()
+
+        console.log('📊 Profile query result:', { data, profileError })
+
+        if (profileError) {
+          console.error('❌ Error fetching user profile:', {
+            message: profileError.message,
+            details: profileError.details,
+            hint: profileError.hint,
+            code: profileError.code
+          })
+          setError(`Failed to fetch user organization: ${profileError.message || 'Unknown error'}`)
+          setLoading(false)
+          return
+        }
+
+        if (!data) {
+          console.warn('⚠️ No user profile found for user:', user.id)
+          setError('User profile not found. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        if (!data.organization_id) {
+          console.warn('⚠️ User has no organization_id:', user.id)
+          setError('User has no organization assigned. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        console.log('✅ Organization ID found:', data.organization_id)
+        setOrganizationId(data.organization_id)
+      } catch (err) {
+        console.error('💥 Exception in fetchUserOrganization:', err)
+        setError('Failed to fetch user organization')
+        setLoading(false)
+      }
+    }
+
+    fetchUserOrganization()
+  }, [user])
+
+  useEffect(() => {
+    if (organizationId) {
+      fetchLeads(currentPage, pageSize)
+    }
+  }, [organizationId])
 
   const fetchLeads = async (page: number = 1, pageSize: number = 25) => {
+    // Don't fetch if we don't have an organization ID yet
+    if (!organizationId) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
@@ -33,10 +98,11 @@ export function useLeads() {
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
       try {
-        // First, get total count for pagination
+        // First, get total count for pagination - filter by organization
         const { count, error: countError } = await supabase
           .from('engaged_leads')
           .select('*', { count: 'exact', head: true })
+          .eq('organization_id', organizationId)
 
         if (countError) {
           console.error('❌ Error getting lead count:', countError)
@@ -63,10 +129,11 @@ export function useLeads() {
         // Calculate offset for pagination
         const offset = (page - 1) * pageSize
 
-        // Fetch paginated data
+        // Fetch paginated data - filter by organization
         const { data, error: supabaseError } = await supabase
           .from('engaged_leads')
           .select('*')
+          .eq('organization_id', organizationId)
           .order('created_at', { ascending: false })
           .range(offset, offset + pageSize - 1)
           .limit(pageSize) // Extra safety limit

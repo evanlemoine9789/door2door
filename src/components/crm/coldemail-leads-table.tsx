@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Drawer, DrawerContent } from "@/components/ui/drawer"
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { Search, Filter, ArrowUpDown } from "lucide-react"
 import { useColdEmailLeads } from "@/hooks/use-coldemail-leads"
 import { ColdEmailLeadDB, ColdEmailStatus } from "@/lib/supabase-coldemail"
@@ -228,6 +228,7 @@ export default function ColdEmailLeadsTable({ selectedLeadId }: ColdEmailLeadsTa
         {/* Lead Details Drawer */}
         <Drawer open={showDetails} onOpenChange={setShowDetails} direction="right">
           <DrawerContent className="!w-1/2 !max-w-none bg-background border-l border-border overflow-y-auto overflow-x-hidden">
+            <DrawerTitle className="sr-only">Lead Details</DrawerTitle>
             <ColdEmailLeadDetails lead={selectedLead} />
           </DrawerContent>
         </Drawer>

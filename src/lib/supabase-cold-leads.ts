@@ -26,6 +26,7 @@ export interface DatabaseColdLead {
   practice_type: string
   created_at: string
   updated_at: string
+  deleted_at: string | null  // Soft delete timestamp
 }
 
 // Convert database cold lead to component lead
@@ -80,14 +81,23 @@ const mapColdLeadUpdatesToDatabaseLead = (updates: Partial<Omit<Lead, 'id'>>): P
   return dbUpdates
 }
 
-// Fetch all cold leads
-export async function fetchColdLeads(): Promise<Lead[]> {
+// Fetch all cold leads (excluding soft-deleted)
+export async function fetchColdLeads(organizationId?: string): Promise<Lead[]> {
   try {
-    const data = await genericFetch<DatabaseColdLead>('cold_leads', {}, {
-      orderBy: 'created_at',
-      ascending: false
-    })
-    return data.map(mapDatabaseColdLeadToLead)
+    let query = supabase
+      .from('cold_leads')
+      .select('*')
+      .is('deleted_at', null)  // Only fetch non-deleted leads
+
+    // Filter by organization if provided
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(mapDatabaseColdLeadToLead)
   } catch (error) {
     console.error('Error in fetchColdLeads:', error)
     throw error
@@ -136,67 +146,101 @@ export async function updateColdLead(id: string, updates: Partial<Omit<Lead, 'id
   }
 }
 
-// Delete a cold lead
+// Soft delete a cold lead (marks as deleted but keeps in database)
 export async function deleteColdLead(id: string): Promise<void> {
   try {
-    // First delete from lead_geocodes table to maintain referential integrity
-    const { error: geocodeError } = await supabase
-      .from('lead_geocodes')
-      .delete()
-      .eq('cold_lead_id', id)
+    // Soft delete: set deleted_at to current timestamp instead of actually deleting
+    const { error } = await supabase
+      .from('cold_leads')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
 
-    if (geocodeError) {
-      console.error('Error deleting from lead_geocodes:', geocodeError)
-      // Continue with cold_leads deletion even if geocode deletion fails
+    if (error) {
+      console.error('Error soft deleting cold lead:', error)
+      throw error
     }
 
-    // Then delete from cold_leads table
-    await genericDelete('cold_leads', id)
+    // Note: We keep lead_geocodes intact for historical data
   } catch (error) {
     console.error('Error in deleteColdLead:', error)
     throw error
   }
 }
 
-// Search cold leads by company or contact name
-export async function searchColdLeads(query: string): Promise<Lead[]> {
+// Search cold leads by company or contact name (excluding soft-deleted)
+export async function searchColdLeads(query: string, organizationId?: string): Promise<Lead[]> {
   try {
-    const data = await genericSearch<DatabaseColdLead>(
-      'cold_leads',
-      ['company_name', 'owner_name'],
-      query,
-      { orderBy: 'created_at', ascending: false }
-    )
-    return data.map(mapDatabaseColdLeadToLead)
+    let dbQuery = supabase
+      .from('cold_leads')
+      .select('*')
+      .is('deleted_at', null)  // Only search non-deleted leads
+      .or(`company_name.ilike.%${query}%,owner_name.ilike.%${query}%`)
+
+    // Filter by organization if provided
+    if (organizationId) {
+      dbQuery = dbQuery.eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await dbQuery.order('created_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(mapDatabaseColdLeadToLead)
   } catch (error) {
     console.error('Error in searchColdLeads:', error)
     throw error
   }
 }
 
-// Filter cold leads by status
-export async function filterColdLeadsByStatus(status: string): Promise<Lead[]> {
+// Filter cold leads by status (excluding soft-deleted)
+export async function filterColdLeadsByStatus(status: string, organizationId?: string): Promise<Lead[]> {
   try {
     if (status === 'all') {
-      return await fetchColdLeads()
+      return await fetchColdLeads(organizationId)
     }
 
-    const data = await genericFetch<DatabaseColdLead>(
-      'cold_leads',
-      { meeting_status: status },
-      { orderBy: 'created_at', ascending: false }
-    )
-    return data.map(mapDatabaseColdLeadToLead)
+    let query = supabase
+      .from('cold_leads')
+      .select('*')
+      .is('deleted_at', null)  // Only fetch non-deleted leads
+      .eq('meeting_status', status)
+
+    // Filter by organization if provided
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []).map(mapDatabaseColdLeadToLead)
   } catch (error) {
     console.error('Error in filterColdLeadsByStatus:', error)
     throw error
   }
 }
 
-// Get cold leads statistics
-export async function getColdLeadsStats() {
+// Get cold leads statistics (excluding soft-deleted)
+export async function getColdLeadsStats(organizationId?: string) {
   try {
-    const stats = await genericStats<DatabaseColdLead>('cold_leads', 'meeting_status')
+    let query = supabase
+      .from('cold_leads')
+      .select('meeting_status')
+      .is('deleted_at', null)  // Only count non-deleted leads
+
+    // Filter by organization if provided
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    const stats: Record<string, number> = {}
+    data?.forEach((row: any) => {
+      const status = row.meeting_status || 'unknown'
+      stats[status] = (stats[status] || 0) + 1
+    })
     
     return {
       total: Object.values(stats).reduce((sum, count) => sum + count, 0),

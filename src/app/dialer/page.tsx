@@ -136,6 +136,10 @@ export default function DialerPage() {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [newSavedSearchName, setNewSavedSearchName] = useState("")
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [contactTab, setContactTab] = useState<'details' | 'notes'>('details')
+  const [noteText, setNoteText] = useState("")
+  const [isSavingNote, setIsSavingNote] = useState(false)
+  const [notes, setNotes] = useState<any[]>([])
   const [filters, setFilters] = useState<FilterState>({
     searchQuery: "",
     selectedStates: [],
@@ -214,6 +218,90 @@ export default function DialerPage() {
     setMeetingTime("")
     setBookedWith("")
     setIsScheduling(false)
+  }, [selectedCaller?.id])
+
+  // Realtime subscription for notes
+  useEffect(() => {
+    if (!selectedCaller?.id) {
+      console.log('📋 No selected caller, clearing notes')
+      setNotes([])
+      return
+    }
+
+    console.log('📋 Setting up realtime subscription for lead:', selectedCaller.id)
+
+    // Fetch existing notes
+    fetchNotes(selectedCaller.id)
+
+    // Set up realtime subscription
+    const channel = supabase
+      .channel(`lead-notes-${selectedCaller.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'lead_notes'
+        },
+        async (payload) => {
+          console.log('📨 New note received via realtime (all notes):', payload)
+          
+          // Check if this note belongs to the current lead
+          if (payload.new.lead_id !== selectedCaller.id) {
+            console.log('📨 Note is for different lead, ignoring')
+            return
+          }
+          
+          console.log('📨 Note is for current lead, processing...')
+          
+          // Get user profile for the new note
+          const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('full_name')
+            .eq('id', payload.new.user_id)
+            .single()
+          
+          // Create the new note object
+          const newNote = {
+            id: payload.new.id,
+            note_text: payload.new.note_text,
+            created_at: payload.new.created_at,
+            user_id: payload.new.user_id,
+            user_profiles: {
+              full_name: userProfile?.full_name || 'Unknown User'
+            }
+          }
+          
+          console.log('📨 Adding new note to state:', newNote)
+          
+          // Add to the top of the notes list (newest first)
+          setNotes(prevNotes => {
+            // Check if note already exists to prevent duplicates
+            const exists = prevNotes.some(note => note.id === newNote.id)
+            if (exists) {
+              console.log('📨 Note already exists, skipping duplicate')
+              return prevNotes
+            }
+            
+            console.log('📨 Adding note to list, new length:', prevNotes.length + 1)
+            return [...prevNotes, newNote]
+          })
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('📡 Successfully subscribed to realtime changes')
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('📡 Realtime subscription error')
+        }
+      })
+
+    // Cleanup subscription
+    return () => {
+      console.log('📋 Cleaning up realtime subscription for lead:', selectedCaller.id)
+      supabase.removeChannel(channel)
+    }
   }, [selectedCaller?.id])
 
   // Get unique values for filter options - now using all data from database
@@ -1058,6 +1146,118 @@ export default function DialerPage() {
     }
   }
 
+  const fetchNotes = async (leadId: string) => {
+    try {
+      console.log('📋 Fetching notes for lead:', leadId)
+      
+      // First, let's try without the JOIN to see if we get basic notes
+      const { data, error } = await supabase
+        .from('lead_notes')
+        .select('*')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true })
+      
+      if (error) {
+        console.error('❌ Error fetching notes:', error)
+        return
+      }
+      
+      console.log('📋 Raw notes data:', data)
+      
+      if (data && data.length > 0) {
+        // Fetch user profiles separately for each note
+        const notesWithUsers = await Promise.all(
+          data.map(async (note) => {
+            const { data: userProfile } = await supabase
+              .from('user_profiles')
+              .select('full_name')
+              .eq('id', note.user_id)
+              .single()
+            
+            return {
+              ...note,
+              user_profiles: {
+                full_name: userProfile?.full_name || 'Unknown User'
+              }
+            }
+          })
+        )
+        
+        console.log('📋 Notes with user profiles:', notesWithUsers)
+        setNotes(notesWithUsers)
+      } else {
+        console.log('📋 No notes found for this lead')
+        setNotes([])
+      }
+    } catch (error) {
+      console.error('💥 Unexpected error fetching notes:', error)
+    }
+  }
+
+  const handleAddNote = async () => {
+    if (!selectedCaller || !noteText.trim() || isSavingNote) return
+    
+    setIsSavingNote(true)
+    
+    try {
+      // Get the current user from Supabase auth
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.error('❌ Error getting user:', authError)
+        toast.error('You must be logged in to add notes')
+        setIsSavingNote(false)
+        return
+      }
+      
+      console.log('📝 Attempting to insert note:', {
+        lead_id: selectedCaller.id,
+        note_text: noteText.trim(),
+        user_id: user.id
+      })
+      
+      // Insert note into lead_notes table
+      const { data, error: insertError } = await supabase
+        .from('lead_notes')
+        .insert({
+          lead_id: selectedCaller.id,
+          note_text: noteText.trim(),
+          user_id: user.id
+        })
+        .select()
+      
+      if (insertError) {
+        console.error('❌ Error inserting note:', {
+          error: insertError,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code
+        })
+        toast.error(`Failed to save note: ${insertError.message || 'Please try again.'}`)
+        setIsSavingNote(false)
+        return
+      }
+      
+      console.log('✅ Note inserted successfully:', data)
+      
+      // Success - clear the input
+      setNoteText("")
+      toast.success('Note added successfully')
+      
+      // Refresh notes to ensure UI is updated (fallback if realtime doesn't work)
+      setTimeout(() => {
+        fetchNotes(selectedCaller.id)
+      }, 500)
+      
+    } catch (error) {
+      console.error('💥 Unexpected error adding note:', error)
+      toast.error('An unexpected error occurred')
+    } finally {
+      setIsSavingNote(false)
+    }
+  }
+
   // Navigation functions for Next/Previous buttons
   const goToNextLead = () => {
     if (callers.length === 0) return
@@ -1812,7 +2012,7 @@ export default function DialerPage() {
 
           {/* Right Card - Contact Details */}
           <div className="col-span-4">
-            <Card className="h-full">
+            <Card className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-card-foreground">Contact Details</CardTitle>
@@ -1842,163 +2042,281 @@ export default function DialerPage() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent>
-                {selectedCaller ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-semibold text-card-foreground mb-2 text-lg">
-                        {selectedCaller.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">{selectedCaller.practice}</p>
-                      
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-card-foreground font-medium">{selectedCaller.phone}</span>
-                        </div>
-                        
-                        {(selectedCaller.city || selectedCaller.state) && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <MapPin className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">
-                              {[selectedCaller.city, selectedCaller.state].filter(Boolean).join(', ')}
-                            </span>
-                          </div>
-                        )}
-                        
-                        {selectedCaller.practiceType && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">{selectedCaller.practiceType}</span>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center gap-2 text-sm">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">Last Call: {selectedCaller.lastCall}</span>
-                        </div>
-                        
-                        
-                        <div className="pt-4 space-y-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-white border-white hover:bg-white hover:text-black"
-                            onClick={() => {
-                              if (selectedCaller.website) {
-                                // Use the actual website from the database
-                                const website = selectedCaller.website.startsWith('http') 
-                                  ? selectedCaller.website 
-                                  : `https://${selectedCaller.website}`
-                                window.open(website, '_blank')
-                              } else {
-                                toast.error('No website available for this lead')
-                              }
-                            }}
-                            disabled={!selectedCaller.website}
-                          >
-                            <ExternalLink className="h-4 w-4 mr-2" />
-                            Visit Site
-                          </Button>
-                          
-                          <div>
-                            <label className="text-xs text-muted-foreground block mb-1">Call Outcome</label>
-                            <Select 
-                              value={selectedCaller.callStatus || ""}
-                              onValueChange={(value) => updateCallStatus(selectedCaller.id, value)}
-                            >
-                              <SelectTrigger className={`w-full ${getCallStatusColor(selectedCaller.callStatus)}`}>
-                                <SelectValue placeholder="Set outcome" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="No Connect">No Connect</SelectItem>
-                                <SelectItem value="Not Booked">Not Booked</SelectItem>
-                                <SelectItem value="Booked">Booked</SelectItem>
-                                <SelectItem value="Do Not Call">Do Not Call</SelectItem>
-                                <SelectItem value="Email">Email</SelectItem>
-                                <SelectItem value="CLEAR_STATUS">Clear Status</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+              
+              {selectedCaller ? (
+                <>
+                  {/* Tab Navigation */}
+                  <div className="flex items-center border-b border-border px-6">
+                    <button
+                      onClick={() => setContactTab('details')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                        contactTab === 'details'
+                          ? 'text-primary'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Details
+                      {contactTab === 'details' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setContactTab('notes')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                        contactTab === 'notes'
+                          ? 'text-primary'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Notes
+                      {contactTab === 'notes' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+                      )}
+                    </button>
+                  </div>
 
-                          {/* Date and Time Inputs */}
-                          <div className="pt-2 space-y-2">
-                            <div>
-                              <label className="text-xs text-muted-foreground block mb-1">Meeting Date</label>
-                              <Input
-                                type="date"
-                                className="w-full bg-card border-border text-foreground"
-                                value={meetingDate}
-                                onChange={(event) => setMeetingDate(event.target.value)}
-                              />
+                  {/* Tab Content */}
+                  <CardContent className="flex-1 overflow-hidden flex flex-col">
+                    {contactTab === 'details' ? (
+                      /* Details Tab */
+                      <div className="space-y-4 overflow-y-auto">
+                        <div>
+                          <h3 className="font-semibold text-card-foreground mb-2 text-lg">
+                            {selectedCaller.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4">{selectedCaller.practice}</p>
+                          
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-card-foreground font-medium">{selectedCaller.phone}</span>
                             </div>
-                            <div>
-                              <label className="text-xs text-muted-foreground block mb-1">Meeting Time</label>
-                              <Input
-                                type="time"
-                                className="w-full bg-card border-border text-foreground"
-                                value={meetingTime}
-                                onChange={(event) => setMeetingTime(event.target.value)}
-                              />
+                            
+                            {(selectedCaller.city || selectedCaller.state) && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">
+                                  {[selectedCaller.city, selectedCaller.state].filter(Boolean).join(', ')}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {selectedCaller.practiceType && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Building2 className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{selectedCaller.practiceType}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center gap-2 text-sm">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Last Call: {selectedCaller.lastCall}</span>
                             </div>
-                            <div>
-                              <label className="text-xs text-muted-foreground block mb-1">Booked With</label>
-                              <Input
-                                type="text"
-                                className="w-full bg-card border-border text-foreground"
-                                placeholder="Enter who the meeting was booked with"
-                                value={bookedWith}
-                                onChange={(event) => setBookedWith(event.target.value)}
-                              />
-                            </div>
-                            <div className={`relative w-full ${isButtonEnabled ? 'p-[2px]' : ''}`}>
-                              {isButtonEnabled && (
-                                <div 
-                                  className="absolute inset-0 rounded-md"
-                                  style={{
-                                    background: 'linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000)',
-                                    backgroundSize: '400% 400%',
-                                    animation: 'rainbowBorder 2s linear infinite',
-                                  }}
-                                />
-                              )}
+                            
+                            
+                            <div className="pt-4 space-y-2">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className={`w-full relative transition-all duration-300 ${
-                                  isButtonEnabled 
-                                    ? 'bg-gray-800 text-white border-0 hover:bg-gray-700' 
-                                    : 'bg-gray-600 text-gray-400 border-2 border-gray-500 opacity-50'
-                                }`}
-                                onClick={handleScheduleMeeting}
-                                disabled={!isButtonEnabled}
+                                className="w-full text-white border-white hover:bg-white hover:text-black"
+                                onClick={() => {
+                                  if (selectedCaller.website) {
+                                    // Use the actual website from the database
+                                    const website = selectedCaller.website.startsWith('http') 
+                                      ? selectedCaller.website 
+                                      : `https://${selectedCaller.website}`
+                                    window.open(website, '_blank')
+                                  } else {
+                                    toast.error('No website available for this lead')
+                                  }
+                                }}
+                                disabled={!selectedCaller.website}
                               >
-                                <div className="relative z-10 flex items-center justify-center">
-                                  {isScheduling ? (
-                                    <>
-                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                      {isLeadInEngagedLeads ? "Updating..." : "Scheduling..."}
-                                    </>
-                                  ) : isLeadInEngagedLeads ? (
-                                    "Reschedule Meeting"
-                                  ) : (
-                                    "Schedule Meeting"
-                                  )}
-                                </div>
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Visit Site
                               </Button>
+                              
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">Call Outcome</label>
+                                <Select 
+                                  value={selectedCaller.callStatus || ""}
+                                  onValueChange={(value) => updateCallStatus(selectedCaller.id, value)}
+                                >
+                                  <SelectTrigger className={`w-full ${getCallStatusColor(selectedCaller.callStatus)}`}>
+                                    <SelectValue placeholder="Set outcome" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="No Connect">No Connect</SelectItem>
+                                    <SelectItem value="Not Booked">Not Booked</SelectItem>
+                                    <SelectItem value="Booked">Booked</SelectItem>
+                                    <SelectItem value="Do Not Call">Do Not Call</SelectItem>
+                                    <SelectItem value="Email">Email</SelectItem>
+                                    <SelectItem value="CLEAR_STATUS">Clear Status</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {/* Date and Time Inputs */}
+                              <div className="pt-2 space-y-2">
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Meeting Date</label>
+                                  <Input
+                                    type="date"
+                                    className="w-full bg-card border-border text-foreground"
+                                    value={meetingDate}
+                                    onChange={(event) => setMeetingDate(event.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Meeting Time</label>
+                                  <Input
+                                    type="time"
+                                    className="w-full bg-card border-border text-foreground"
+                                    value={meetingTime}
+                                    onChange={(event) => setMeetingTime(event.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Booked With</label>
+                                  <Input
+                                    type="text"
+                                    className="w-full bg-card border-border text-foreground"
+                                    placeholder="Enter who the meeting was booked with"
+                                    value={bookedWith}
+                                    onChange={(event) => setBookedWith(event.target.value)}
+                                  />
+                                </div>
+                                <div className={`relative w-full ${isButtonEnabled ? 'p-[2px]' : ''}`}>
+                                  {isButtonEnabled && (
+                                    <div 
+                                      className="absolute inset-0 rounded-md"
+                                      style={{
+                                        background: 'linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000)',
+                                        backgroundSize: '400% 400%',
+                                        animation: 'rainbowBorder 2s linear infinite',
+                                      }}
+                                    />
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={`w-full relative transition-all duration-300 ${
+                                      isButtonEnabled 
+                                        ? 'bg-gray-800 text-white border-0 hover:bg-gray-700' 
+                                        : 'bg-gray-600 text-gray-400 border-2 border-gray-500 opacity-50'
+                                    }`}
+                                    onClick={handleScheduleMeeting}
+                                    disabled={!isButtonEnabled}
+                                  >
+                                    <div className="relative z-10 flex items-center justify-center">
+                                      {isScheduling ? (
+                                        <>
+                                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                          {isLeadInEngagedLeads ? "Updating..." : "Scheduling..."}
+                                        </>
+                                      ) : isLeadInEngagedLeads ? (
+                                        "Reschedule Meeting"
+                                      ) : (
+                                        "Schedule Meeting"
+                                      )}
+                                    </div>
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ) : (
+                    ) : (
+                      /* Notes Tab */
+                      <div className="flex flex-col flex-1 min-h-0">
+                        {/* Notes Feed - Scrollable */}
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-3">
+                          {notes.length > 0 ? (
+                            notes.map((note) => {
+                              const initials = note.user_profiles?.full_name
+                                ?.split(' ')
+                                .map((n: string) => n[0])
+                                .join('')
+                                .toUpperCase() || 'U'
+                              
+                              const timeAgo = new Date(note.created_at).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })
+                              
+                              return (
+                                <div key={note.id} className="flex items-start space-x-2">
+                                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <span className="text-xs font-semibold text-primary">{initials}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline space-x-2 mb-1">
+                                      <span className="text-xs font-semibold text-foreground">
+                                        {note.user_profiles?.full_name || 'Unknown User'}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">{timeAgo}</span>
+                                    </div>
+                                    <div className="bg-muted rounded-lg p-2 border border-border">
+                                      <p className="text-xs text-foreground">{note.note_text}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className="text-center py-8 text-muted-foreground text-xs">
+                              No notes yet. Add the first note below!
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Message Input - Sticky at bottom */}
+                        <div className="flex-shrink-0 border-t border-border pt-3">
+                          <div className="flex items-end space-x-2">
+                            <input
+                              type="text"
+                              placeholder="Add a note..."
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && noteText.trim() && !isSavingNote) {
+                                  handleAddNote()
+                                }
+                              }}
+                              disabled={isSavingNote}
+                              className="flex-1 px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+                            />
+                            <button 
+                              onClick={handleAddNote}
+                              disabled={!noteText.trim() || isSavingNote}
+                              className="flex-shrink-0 p-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isSavingNote ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </>
+              ) : (
+                <CardContent>
                   <div className="text-center text-muted-foreground">
                     <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>Select a contact to view details</p>
                   </div>
-                )}
-              </CardContent>
+                </CardContent>
+              )}
             </Card>
           </div>
         </div>

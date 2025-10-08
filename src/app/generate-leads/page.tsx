@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { sendGenerateLeadsToWebhook } from "@/lib/webhook-api"
+import { useAuth } from "@/components/providers/auth-provider"
+import { supabase } from "@/lib/supabase"
 
 const practiceTypes = [
   "Academic Dermatology",
@@ -107,6 +109,8 @@ const usStates = [
 ]
 
 export default function GenerateLeadsPage() {
+  const { user } = useAuth()
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     practiceType: "",
     city: "",
@@ -117,6 +121,48 @@ export default function GenerateLeadsPage() {
     type: 'success' | 'error' | null
     message: string
   }>({ type: null, message: "" })
+
+  // Fetch user's organization_id on mount
+  useEffect(() => {
+    async function fetchUserOrganization() {
+      if (!user) {
+        console.error('⚠️ No user found for generate leads')
+        return
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single()
+
+        if (error) {
+          console.error('❌ Error fetching user organization:', error)
+          setSubmitStatus({
+            type: 'error',
+            message: 'Unable to fetch user organization. Please try again.'
+          })
+          return
+        }
+
+        if (data?.organization_id) {
+          console.log('✅ Organization ID loaded:', data.organization_id)
+          setOrganizationId(data.organization_id)
+        } else {
+          console.error('⚠️ User has no organization assigned')
+          setSubmitStatus({
+            type: 'error',
+            message: 'User has no organization assigned. Please contact support.'
+          })
+        }
+      } catch (err) {
+        console.error('💥 Exception fetching organization:', err)
+      }
+    }
+
+    fetchUserOrganization()
+  }, [user])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target
@@ -145,9 +191,36 @@ export default function GenerateLeadsPage() {
     setIsSubmitting(true)
     setSubmitStatus({ type: null, message: "" })
 
+    // Validate user and organization
+    if (!user) {
+      setSubmitStatus({
+        type: 'error',
+        message: 'You must be logged in to generate leads.'
+      })
+      setIsSubmitting(false)
+      return
+    }
+
+    if (!organizationId) {
+      setSubmitStatus({
+        type: 'error',
+        message: 'Unable to determine your organization. Please try again or contact support.'
+      })
+      setIsSubmitting(false)
+      return
+    }
+
     try {
-      console.log('🚀 Starting lead generation request with data:', formData)
-      const result = await sendGenerateLeadsToWebhook(formData)
+      console.log('🚀 Starting lead generation request with data:', {
+        ...formData,
+        user_id: user.id,
+        organization_id: organizationId
+      })
+      const result = await sendGenerateLeadsToWebhook({
+        ...formData,
+        user_id: user.id,
+        organization_id: organizationId
+      })
       
       if (result.success) {
         console.log('✅ Lead generation request successful:', result.data)

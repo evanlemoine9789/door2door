@@ -148,6 +148,8 @@ interface GenerateLeadsPayload {
   practice_type: string
   city: string
   state: string
+  user_id: string
+  organization_id: string
   timestamp: string
   source: string
 }
@@ -162,6 +164,8 @@ export const sendGenerateLeadsToWebhook = async (
     practiceType: string
     city: string
     state: string
+    user_id: string
+    organization_id: string
   }
 ): Promise<{ success: true; data: any } | { success: false; error: string }> => {
   try {
@@ -174,11 +178,13 @@ export const sendGenerateLeadsToWebhook = async (
     // Log the webhook URL (without exposing the full URL for security)
     console.log('🔗 Using webhook URL:', N8N_LEAD_AGENT_WEBHOOK_URL ? `${N8N_LEAD_AGENT_WEBHOOK_URL.substring(0, 30)}...` : 'undefined')
     
-    // Prepare the payload
+    // Prepare the payload with user and organization information
     const payload: GenerateLeadsPayload = {
       practice_type: formData.practiceType,
       city: formData.city,
       state: formData.state,
+      user_id: formData.user_id,
+      organization_id: formData.organization_id,
       timestamp: new Date().toISOString(),
       source: 'generate_leads_form'
     }

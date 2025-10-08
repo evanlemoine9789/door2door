@@ -95,9 +95,10 @@ const mapLeadUpdatesToDatabaseLead = (updates: Partial<Omit<Lead, 'id'>>): Parti
 }
 
 // Fetch all leads
-export async function fetchLeads(): Promise<Lead[]> {
+export async function fetchLeads(organizationId?: string): Promise<Lead[]> {
   try {
-    const data = await genericFetch<DatabaseLead>('engaged_leads', {}, {
+    const filters = organizationId ? { organization_id: organizationId } : {}
+    const data = await genericFetch<DatabaseLead>('engaged_leads', filters, {
       orderBy: 'created_at',
       ascending: false
     })
@@ -161,13 +162,14 @@ export async function deleteLead(id: string): Promise<void> {
 }
 
 // Search leads by company or contact name
-export async function searchLeads(query: string): Promise<Lead[]> {
+export async function searchLeads(query: string, organizationId?: string): Promise<Lead[]> {
   try {
     const data = await genericSearch<DatabaseLead>(
       'engaged_leads',
       ['company', 'contact_name'],
       query,
-      { orderBy: 'created_at', ascending: false }
+      { orderBy: 'created_at', ascending: false },
+      organizationId ? { organization_id: organizationId } : undefined
     )
     return data.map(mapDatabaseLeadToLead)
   } catch (error) {
@@ -177,15 +179,19 @@ export async function searchLeads(query: string): Promise<Lead[]> {
 }
 
 // Filter leads by status
-export async function filterLeadsByStatus(status: string): Promise<Lead[]> {
+export async function filterLeadsByStatus(status: string, organizationId?: string): Promise<Lead[]> {
   try {
     if (status === 'all') {
-      return await fetchLeads()
+      return await fetchLeads(organizationId)
     }
 
+    const filters = organizationId 
+      ? { meeting_status: status, organization_id: organizationId }
+      : { meeting_status: status }
+    
     const data = await genericFetch<DatabaseLead>(
       'engaged_leads',
-      { meeting_status: status },
+      filters,
       { orderBy: 'created_at', ascending: false }
     )
     return data.map(mapDatabaseLeadToLead)
@@ -196,9 +202,10 @@ export async function filterLeadsByStatus(status: string): Promise<Lead[]> {
 }
 
 // Get leads statistics
-export async function getLeadsStats() {
+export async function getLeadsStats(organizationId?: string) {
   try {
-    const stats = await genericStats<DatabaseLead>('engaged_leads', 'meeting_status')
+    const filters = organizationId ? { organization_id: organizationId } : undefined
+    const stats = await genericStats<DatabaseLead>('engaged_leads', 'meeting_status', filters)
     
     return {
       total: Object.values(stats).reduce((sum, count) => sum + count, 0),
