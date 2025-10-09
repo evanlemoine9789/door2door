@@ -790,18 +790,29 @@ export default function DialerPage() {
 
       if (error) throw error
 
-      // Remove from local state
-      setCallers(prevCallers => prevCallers.filter(caller => caller.id !== callerId))
+      // Find the index of the lead being deleted
+      const deletedIndex = callers.findIndex(caller => caller.id === callerId)
       
-      // Clear selected caller if it's the one being deleted
-      if (selectedCaller?.id === callerId) {
+      // Remove from local state
+      const updatedCallers = callers.filter(caller => caller.id !== callerId)
+      setCallers(updatedCallers)
+      
+      // Select the next appropriate lead to maintain position
+      if (selectedCaller?.id === callerId && updatedCallers.length > 0) {
+        // If we deleted the last lead in the list, select the new last lead
+        // Otherwise, select the lead at the same index (which is now the "next" lead)
+        const nextIndex = Math.min(deletedIndex, updatedCallers.length - 1)
+        const nextCaller = updatedCallers[nextIndex]
+        setSelectedCaller(nextCaller)
+        setCurrentLeadIndex(nextIndex)
+        populateDialer(nextCaller.phone)
+      } else if (updatedCallers.length === 0) {
+        // If no leads left, clear selection
         setSelectedCaller(null)
+        setCurrentLeadIndex(0)
       }
 
       toast.success('Lead deleted successfully')
-      
-      // Refresh the list to get updated counts
-      fetchCallers(dialerCurrentPage, dialerPageSize, filters)
       
     } catch (err) {
       console.error('Error deleting lead:', err)
@@ -941,20 +952,29 @@ export default function DialerPage() {
       if (error) throw error
 
       // Remove from local state
-      setCallers(prevCallers => prevCallers.filter(caller => !selectedLeadIds.includes(caller.id)))
+      const updatedCallers = callers.filter(caller => !selectedLeadIds.includes(caller.id))
+      setCallers(updatedCallers)
       
-      // Clear selected caller if it's being deleted
+      // Select the next appropriate lead to maintain position if current is being deleted
       if (selectedCaller && selectedLeadIds.includes(selectedCaller.id)) {
-        setSelectedCaller(null)
+        if (updatedCallers.length > 0) {
+          // Find the first lead that wasn't deleted, starting from current position
+          const currentIndex = callers.findIndex(c => c.id === selectedCaller.id)
+          const nextIndex = Math.min(currentIndex, updatedCallers.length - 1)
+          const nextCaller = updatedCallers[nextIndex]
+          setSelectedCaller(nextCaller)
+          setCurrentLeadIndex(nextIndex)
+          populateDialer(nextCaller.phone)
+        } else {
+          setSelectedCaller(null)
+          setCurrentLeadIndex(0)
+        }
       }
 
       // Clear selection
       setSelectedLeadIds([])
       
       toast.success(`Successfully deleted ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`)
-      
-      // Refresh the list to get updated counts
-      fetchCallers(dialerCurrentPage, dialerPageSize, filters)
       
     } catch (err) {
       console.error('Error bulk deleting leads:', err)
@@ -1896,8 +1916,10 @@ export default function DialerPage() {
                         {callers.map((caller) => (
                           <div
                             key={caller.id}
-                            className={`p-3 hover:bg-muted/50 transition-colors border-b border-border last:border-b-0 ${
-                              selectedCaller?.id === caller.id ? 'bg-muted/30' : ''
+                            className={`p-3 transition-all border-b last:border-b-0 ${
+                              selectedCaller?.id === caller.id 
+                                ? 'bg-primary/10 border-l-4 border-l-primary border-b-border shadow-sm' 
+                                : 'hover:bg-muted/50 border-l-4 border-l-transparent border-b-border'
                             } ${
                               isLeadSelected(caller.id) ? 'bg-primary/5 border-primary/20' : ''
                             }`}
