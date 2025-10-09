@@ -2110,13 +2110,18 @@ export default function DialerPage() {
                     </button>
                     <button
                       onClick={() => setContactTab('notes')}
-                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
                         contactTab === 'notes'
                           ? 'text-primary'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       Notes
+                      {notes.length > 0 && (
+                        <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-gray-400 text-white text-xs font-semibold">
+                          {notes.length}
+                        </span>
+                      )}
                       {contactTab === 'notes' && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
                       )}
