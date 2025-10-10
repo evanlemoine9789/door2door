@@ -32,17 +32,17 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
     icon: Flame,
   },
   {
-    title: "Generate Leads",
-    href: "/generate-leads",
-    icon: Search,
+    title: "Dialer",
+    href: "/dialer-mobile",
+    icon: Phone,
   },
 ]
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   {
-    title: "Dialer",
-    href: "/dialer",
-    icon: Phone,
+    title: "Generate Leads",
+    href: "/generate-leads",
+    icon: Search,
   },
   {
     title: "Map",
