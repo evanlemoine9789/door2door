@@ -117,10 +117,37 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* iPhone safe area support */
+  html {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
 }
 
 @layer utilities {
   .shadow-soft {
     box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+  }
+  
+  /* Safe area utilities for iPhone */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Mobile drawer scrolling fixes */
+  @media (max-width: 768px) {
+    [data-vaul-drawer-direction="bottom"] {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    
+    [data-vaul-drawer-direction="bottom"] .flex-1 {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
   }
 }

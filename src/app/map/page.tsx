@@ -12,7 +12,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin, Navigation } from 'lucide-react'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin, Navigation, Filter } from 'lucide-react'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 export default function MapPage() {
   const [geocodeData, setGeocodeData] = useState<GeocodeData[]>([])
@@ -26,6 +28,8 @@ export default function MapPage() {
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationMessage, setOptimizationMessage] = useState('')
   const [optimizationError, setOptimizationError] = useState('')
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const isMobile = useIsMobile()
   
   // Address search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -492,6 +496,322 @@ export default function MapPage() {
     }
   }
 
+  // Mobile Layout
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 flex flex-col overflow-hidden pb-16">
+        {/* Search Bar - Fixed at top */}
+        <div className="flex-shrink-0 p-4 bg-background z-[1000]">
+          <form onSubmit={handleSearchSubmit} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                type="text"
+                placeholder="Search address..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-11 bg-white/95 backdrop-blur-sm border-border text-foreground placeholder:text-muted-foreground shadow-lg"
+              />
+            </div>
+            <div className="flex gap-2">
+              {/* Search Button */}
+              <Button
+                type="submit"
+                disabled={isSearching || !searchQuery.trim()}
+                className="h-11 w-11 p-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                title="Search for address"
+              >
+                {isSearching ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <MapPin className="h-4 w-4" />
+                )}
+              </Button>
+              
+              {/* My Location Button */}
+              <Button
+                type="button"
+                onClick={handleLocationClick}
+                disabled={isLocating}
+                className="h-11 w-11 p-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                title="Find your location"
+              >
+                {isLocating ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Navigation className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </form>
+          
+          {/* Search Error */}
+          {searchError && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+              {searchError}
+            </div>
+          )}
+          
+          {/* Location Error */}
+          {locationError && (
+            <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm flex items-center justify-between">
+              <span>{locationError}</span>
+              <button 
+                onClick={() => setLocationError(null)}
+                className="ml-2 text-red-600 hover:text-red-800 font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Map Container - Takes remaining space */}
+        <div className="flex-1 relative overflow-hidden">
+          {loadingGeocodeData ? (
+            <div className="h-full bg-card flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-card-foreground text-lg mb-2">Loading Map Data...</div>
+                <div className="text-muted-foreground text-sm">Fetching all geocoded leads</div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Filters Button - Fixed at bottom right */}
+              <div className="absolute bottom-4 right-4 z-[1000]">
+                <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      className="h-12 w-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                      title="Filters & Route"
+                    >
+                      <Filter className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="bottom" className="h-[80vh] flex flex-col">
+                    <SheetTitle className="text-lg font-semibold flex-shrink-0">Filters & Route</SheetTitle>
+                    <div className="flex-1 overflow-y-auto py-4 space-y-4">
+                      
+                      {/* Practice Type Filter */}
+                      <Collapsible open={isPracticeFilterOpen} onOpenChange={setIsPracticeFilterOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-between p-3 h-auto hover:bg-muted/50 border border-border rounded-lg"
+                          >
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-card-foreground">
+                                Practice Types
+                              </h3>
+                              <span className="text-xs text-muted-foreground">
+                                ({selectedPracticeTypes.size} selected)
+                              </span>
+                            </div>
+                            {isPracticeFilterOpen ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-2 pb-2">
+                          {loadingPracticeTypes ? (
+                            <div className="text-sm text-muted-foreground p-2">
+                              Loading practice types...
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">
+                                  {selectedPracticeTypes.size} of {uniquePracticeTypes.length} selected
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedPracticeTypes(new Set())}
+                                  className="text-xs h-7 px-2"
+                                >
+                                  Deselect All
+                                </Button>
+                              </div>
+                              
+                              <ScrollArea className="h-[200px]">
+                                <div className="space-y-2">
+                                  {uniquePracticeTypes.map((practiceType) => (
+                                    <div key={practiceType} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={practiceType}
+                                        checked={selectedPracticeTypes.has(practiceType || '')}
+                                        onCheckedChange={(checked) => 
+                                          handlePracticeTypeChange(practiceType || '', checked as boolean)
+                                        }
+                                      />
+                                      <label 
+                                        htmlFor={practiceType}
+                                        className="text-sm text-card-foreground cursor-pointer"
+                                      >
+                                        {practiceType}
+                                      </label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </ScrollArea>
+                              <div className="pt-2 border-t border-border">
+                                <p className="text-xs text-muted-foreground">
+                                  Showing {filteredGeocodeData.length} of {geocodeData.length} leads
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* Route Selection */}
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-card-foreground">
+                          Route Selection
+                        </h3>
+                        
+                        {selectedLeads.length === 0 ? (
+                          <div className="text-center py-8">
+                            <div className="text-muted-foreground text-sm mb-2">
+                              No leads selected
+                            </div>
+                            <div className="text-muted-foreground text-xs">
+                              Tap markers on the map to select leads
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-primary font-medium">
+                                {selectedLeads.length} lead{selectedLeads.length !== 1 ? 's' : ''} selected
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedLeads([])}
+                                className="text-xs h-7 px-2"
+                              >
+                                Clear All
+                              </Button>
+                            </div>
+                            
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-2">
+                                {selectedLeads.map((lead, index) => (
+                                  <div
+                                    key={`selected-${lead.cold_lead_id}-${lead.latitude}-${lead.longitude}-${index}`}
+                                    className="bg-card rounded-lg p-3 border border-border"
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-card-foreground text-sm truncate">
+                                          {lead.cold_leads?.company_name || 'Unknown Business'}
+                                        </div>
+                                        <div className="text-card-foreground text-xs mt-1">
+                                          {lead.cold_leads?.owner_name || 'Unknown Owner'}
+                                        </div>
+                                        <div className="text-muted-foreground text-xs mt-1 truncate">
+                                          {lead.address || 'No address'}
+                                        </div>
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleLeadSelection(lead)}
+                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                            
+                            {/* Route Optimization Form */}
+                            {selectedLeads.length >= 2 && (
+                              <div className="pt-4 border-t border-border">
+                                <div className="space-y-3">
+                                  <div>
+                                    <Label htmlFor="email" className="text-sm font-medium text-card-foreground">
+                                      Email Address
+                                    </Label>
+                                    <Input
+                                      id="email"
+                                      type="email"
+                                      placeholder="your@email.com"
+                                      value={emailAddress}
+                                      onChange={(e) => setEmailAddress(e.target.value)}
+                                      className="mt-1 h-11"
+                                    />
+                                  </div>
+                                  
+                                  <Button
+                                    onClick={handleOptimizeRoute}
+                                    disabled={isOptimizing || !emailAddress.trim()}
+                                    className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                                  >
+                                    {isOptimizing ? (
+                                      <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
+                                        Optimizing Route...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Send className="h-4 w-4 mr-2" />
+                                        Optimize & Send Route
+                                      </>
+                                    )}
+                                  </Button>
+                                  
+                                  {/* Success Message */}
+                                  {optimizationMessage && (
+                                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                                      <p className="text-sm text-green-800">{optimizationMessage}</p>
+                                    </div>
+                                  )}
+                                  
+                                  {/* Error Message */}
+                                  {optimizationError && (
+                                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
+                                      <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                      <p className="text-sm text-red-800">{optimizationError}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
+              
+              {/* Full-screen map */}
+              <MapComponent 
+                geocodeData={filteredGeocodeData} 
+                selectedLeads={selectedLeads}
+                onLeadSelection={handleLeadSelection}
+                center={mapCenter}
+                zoom={mapZoom}
+                searchResult={searchResult}
+                onClearSearch={clearSearchResult}
+                userLocation={userLocation}
+                className="h-full w-full"
+              />
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Desktop Layout (unchanged)
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden">
       {/* Main content area with sidebar and map - takes full height */}

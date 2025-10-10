@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Filter, ArrowUpDown, AlertTriangle } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Search, Filter, ArrowUpDown, AlertTriangle, MapPin } from "lucide-react"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // Status filter types and options
 type StatusValue = 'all' | 'scheduled' | 'ran' | 'cancelled';
@@ -136,24 +138,86 @@ export function LeadsTable({
     return !lead.meetingDate || !lead.meetingTime || lead.meetingDate.trim() === '' || lead.meetingTime.trim() === ''
   }
 
+  const isMobile = useIsMobile()
+
+  // Mobile Card View Component
+  const MobileLeadCard = ({ lead }: { lead: Lead }) => (
+    <Card 
+      className={`cursor-pointer transition-all border-0 shadow-none bg-transparent hover:bg-accent/50 ${
+        selectedLeadId === lead.id ? 'bg-primary/10' : ''
+      }`}
+      onClick={() => onLeadSelect(lead)}
+    >
+      <CardContent className="p-2">
+        {/* Header with company and status */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm text-card-foreground truncate leading-tight">
+              {lead.company}
+            </h3>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span>{lead.contactName}</span>
+              {(lead.city || lead.state) && (
+                <>
+                  <span>•</span>
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate">{getLocationString(lead.city, lead.state)}</span>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge className={getStatusBadgeClass(lead.meetingStatus)}>
+              {lead.meetingStatus}
+            </Badge>
+            {isMeetingDataMissing(lead) && (
+              <AlertTriangle className="h-3 w-3 text-yellow-500" />
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  const getLocationString = (city: string | null, state: string | null) => {
+    if (!city && !state) return '–'
+    if (city && state) return `${city}, ${state}`
+    return city || state || '–'
+  }
+
+  const getStatusBadgeClass = (status: Lead['meetingStatus']) => {
+    switch (status) {
+      case 'scheduled':
+        return 'bg-blue-500/60 hover:bg-blue-600/70 text-white border border-blue-400/30'
+      case 'cancelled':
+        return 'bg-red-500/60 hover:bg-red-600/70 text-white border border-red-400/30'
+      case 'ran':
+        return 'bg-green-500/60 hover:bg-green-600/70 text-white border border-green-400/30'
+      default:
+        return 'bg-secondary text-secondary-foreground'
+    }
+  }
+
   return (
     <div className="w-full space-y-4">
       {/* Search and Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-6">
+        {/* Search Bar */}
+        <div className="relative w-full md:flex-1 md:max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
             placeholder="Search contacts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
+            className="pl-10 h-11 md:h-9 bg-card border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
         
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+        {/* Filter Buttons - Wrap on Mobile */}
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusValue)}>
-            <SelectTrigger className="w-[180px] bg-card border-border text-foreground">
+            <SelectTrigger className="h-11 md:h-9 bg-card border-border text-foreground">
+              <Filter className="h-4 w-4 text-muted-foreground mr-2" />
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
@@ -164,9 +228,9 @@ export function LeadsTable({
               ))}
             </SelectContent>
           </Select>
-          <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           <Select value={sortDir || "default"} onValueChange={(value) => setSortDir(value === "default" ? undefined : value as 'asc' | 'desc')}>
-            <SelectTrigger className="w-[180px] bg-card border-border text-foreground">
+            <SelectTrigger className="h-11 md:h-9 bg-card border-border text-foreground">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground mr-2" />
               <SelectValue placeholder="Default" />
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
@@ -175,12 +239,26 @@ export function LeadsTable({
               <SelectItem value="asc">Meeting Date (Oldest)</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Results Count - Show on larger screens only */}
+          <div className="hidden md:block text-sm text-muted-foreground whitespace-nowrap">
+            {filteredLeads.length} results
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden bg-card">
-        <Table>
+      {/* Leads Display - Cards on Mobile, Table on Desktop */}
+      {isMobile ? (
+        // Mobile Card View
+        <div className="space-y-0">
+          {filteredLeads.map((lead) => (
+            <MobileLeadCard key={lead.id} lead={lead} />
+          ))}
+        </div>
+      ) : (
+        // Desktop Table View
+        <div className="border border-border rounded-lg overflow-hidden bg-card">
+          <Table>
           <TableHeader>
             <TableRow className="bg-muted hover:bg-muted">
               <TableHead className="text-left text-muted-foreground font-medium">COMPANY</TableHead>
@@ -227,7 +305,8 @@ export function LeadsTable({
             ))}
           </TableBody>
         </Table>
-      </div>
+        </div>
+      )}
 
       {/* Pagination Controls */}
       {onPageChange && onPageSizeChange && (

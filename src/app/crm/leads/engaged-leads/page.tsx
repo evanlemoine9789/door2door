@@ -6,6 +6,8 @@ import { LeadDetails } from "@/components/crm/lead-details"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { useLeads } from "@/hooks/use-leads"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 export default function CRMPage() {
   const { 
@@ -22,6 +24,7 @@ export default function CRMPage() {
   } = useLeads()
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const isMobile = useIsMobile()
 
   const handleLeadSelect = (lead: Lead) => {
     setSelectedLead(lead)
@@ -122,9 +125,18 @@ export default function CRMPage() {
           />
         </div>
 
-        {/* Lead Details Drawer */}
-        <Drawer open={showDetails} onOpenChange={setShowDetails} direction="right">
-          <DrawerContent className="!w-1/2 !max-w-none bg-background border-l border-border overflow-y-auto overflow-x-hidden">
+        {/* Lead Details Drawer - Responsive */}
+        <Drawer 
+          open={showDetails} 
+          onOpenChange={setShowDetails} 
+          direction={isMobile ? "bottom" : "right"}
+        >
+          <DrawerContent className={cn(
+            "bg-background overflow-x-hidden",
+            isMobile 
+              ? "!h-full !max-h-none !rounded-none border-0 flex flex-col" 
+              : "!w-1/2 !max-w-none border-l border-border overflow-y-auto"
+          )}>
             <DrawerTitle className="sr-only">Lead Details</DrawerTitle>
             {selectedLead && (
               <LeadDetails

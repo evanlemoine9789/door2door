@@ -6,7 +6,9 @@ import { LeadDetailsFlexible } from "@/components/crm/lead-details-flexible"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { useColdLeads } from "@/hooks/use-cold-leads"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { supabase } from "@/lib/supabase"
+import { cn } from "@/lib/utils"
 import { toast } from 'sonner'
 
 export default function ColdLeadsPage() {
@@ -27,6 +29,7 @@ export default function ColdLeadsPage() {
   const [selectedLead, setSelectedLead] = useState<ColdLead | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([])
+  const isMobile = useIsMobile()
 
   const handleLeadSelect = (lead: ColdLead) => {
     setSelectedLead(lead)
@@ -163,9 +166,18 @@ export default function ColdLeadsPage() {
           />
         </div>
 
-        {/* Lead Details Drawer */}
-        <Drawer open={showDetails} onOpenChange={setShowDetails} direction="right">
-          <DrawerContent className="!w-1/2 !max-w-none bg-background border-l border-border overflow-y-auto overflow-x-hidden">
+        {/* Lead Details Drawer - Responsive */}
+        <Drawer 
+          open={showDetails} 
+          onOpenChange={setShowDetails} 
+          direction={isMobile ? "bottom" : "right"}
+        >
+          <DrawerContent className={cn(
+            "bg-background overflow-x-hidden",
+            isMobile 
+              ? "!h-full !max-h-none !rounded-none border-0 flex flex-col" 
+              : "!w-1/2 !max-w-none border-l border-border overflow-y-auto"
+          )}>
             <DrawerTitle className="sr-only">Lead Details</DrawerTitle>
             {selectedLead && (
               <LeadDetailsFlexible

@@ -4,6 +4,8 @@ import { Lead } from "./leads-table"
 import { Edit, Trash2, Save, X, Check } from "lucide-react"
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 interface LeadDetailsFlexibleProps {
   lead: Lead | null
@@ -21,6 +23,7 @@ export function LeadDetailsFlexible({ lead, onEdit, onDelete, onLeadUpdate, tabl
   const [notes, setNotes] = useState<any[]>([])
   const [noteText, setNoteText] = useState("")
   const [isSavingNote, setIsSavingNote] = useState(false)
+  const isMobile = useIsMobile()
 
   if (!lead) return null
 
@@ -431,7 +434,12 @@ export function LeadDetailsFlexible({ lead, onEdit, onDelete, onLeadUpdate, tabl
   if (!currentLead) return null
 
   return (
-    <div className="bg-card rounded-lg border border-border shadow-soft h-full flex flex-col min-w-0 overflow-hidden">
+    <div className={cn(
+      "bg-card h-full flex flex-col min-w-0",
+      isMobile 
+        ? "rounded-none border-0 shadow-none" 
+        : "rounded-lg border border-border shadow-soft overflow-hidden"
+    )}>
       {/* Header */}
       <div className="border-b border-border px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -544,7 +552,10 @@ export function LeadDetailsFlexible({ lead, onEdit, onDelete, onLeadUpdate, tabl
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className={cn(
+        "flex-1 flex flex-col",
+        isMobile ? "overflow-y-auto" : "overflow-hidden"
+      )}>
         {activeTab === 'details' ? (
           /* Details Tab */
           <div className="flex flex-1 min-h-0">
@@ -909,34 +920,36 @@ export function LeadDetailsFlexible({ lead, onEdit, onDelete, onLeadUpdate, tabl
         )}
       </div>
 
-      {/* Footer Actions */}
-      <div className="border-t border-border px-6 py-3 bg-muted rounded-b-lg flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            Last updated: {formatDate(currentLead.lastUpdated)}
-          </div>
-          <div className="flex items-center space-x-2">
-            <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-card text-muted-foreground border border-border hover:bg-accent">
-              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-              </svg>
-              Add Note
-            </button>
-            <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-card text-muted-foreground border border-border hover:bg-accent">
-              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-              Call
-            </button>
-            <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-primary text-primary-foreground hover:bg-primary/90">
-              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4m-4 0H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1h-4z" />
-              </svg>
-              Schedule Follow-up
-            </button>
+      {/* Footer Actions - Hidden on Mobile */}
+      {!isMobile && (
+        <div className="border-t border-border px-6 py-3 bg-muted rounded-b-lg flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              Last updated: {formatDate(currentLead.lastUpdated)}
+            </div>
+            <div className="flex items-center space-x-2">
+              <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-card text-muted-foreground border border-border hover:bg-accent">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                Add Note
+              </button>
+              <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-card text-muted-foreground border border-border hover:bg-accent">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                Call
+              </button>
+              <button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded transition-colors bg-primary text-primary-foreground hover:bg-primary/90">
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4m-4 0H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1h-4z" />
+                </svg>
+                Schedule Follow-up
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

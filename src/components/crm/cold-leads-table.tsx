@@ -7,9 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Search, Globe, ChevronDown, Trash2, Save, Bookmark, MoreHorizontal } from "lucide-react"
-import { useDropdownOptions } from "@/hooks/use-dropdown-options"
-import { SearchableDropdown } from "@/components/ui/searchable-dropdown"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Card, CardContent } from "@/components/ui/card"
+import { Search, Globe, ChevronDown, X, MapPin, Trash2 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 // Types for the cold leads data
 export interface ColdLead {
@@ -63,14 +67,6 @@ interface FilterState {
   sortDir: 'asc' | 'desc' | undefined
 }
 
-interface SavedSearch {
-  id: string
-  name: string
-  filters: FilterState
-  createdAt: string
-}
-
-const SAVED_SEARCHES_STORAGE_KEY = "cold_leads_saved_searches"
 
 export function ColdLeadsTable({ 
   leads, 
@@ -98,106 +94,87 @@ export function ColdLeadsTable({
 }: ColdLeadsTableProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   
-  // Saved searches state
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
-  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
-  const [newSavedSearchName, setNewSavedSearchName] = useState("")
-  const [saveError, setSaveError] = useState<string | null>(null)
+  // State for all dropdown options from entire database
+  const [allPracticeTypes, setAllPracticeTypes] = useState<string[]>([])
+  const [allStates, setAllStates] = useState<string[]>([])
+  const [allCities, setAllCities] = useState<string[]>([])
   
-  // Use the new search-based dropdown hook
-  const {
-    searchPracticeTypes,
-    searchStates,
-    searchCities
-  } = useDropdownOptions()
+  // Search state for filtering within popovers
+  const [practiceTypeSearchTerm, setPracticeTypeSearchTerm] = useState("")
+  const [stateSearchTerm, setStateSearchTerm] = useState("")
+  const [citySearchTerm, setCitySearchTerm] = useState("")
 
 
-  // Load saved searches from localStorage
-  const loadSavedSearches = () => {
-    if (typeof window === "undefined") return
+
+  // Fetch all dropdown options from the database
+  const fetchAllDropdownOptions = async () => {
     try {
-      const raw = localStorage.getItem(SAVED_SEARCHES_STORAGE_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as SavedSearch[]
-      setSavedSearches(parsed)
-    } catch (err) {
-      console.error("Failed to load saved searches", err)
+      let allData: any[] = []
+      let start = 0
+      const batchSize = 1000
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('cold_leads')
+          .select('practice_type, state, city')
+          .is('deleted_at', null) // Only get non-deleted leads
+          .range(start, start + batchSize - 1)
+
+        if (error) {
+          console.error('❌ Error fetching dropdown options batch:', error)
+          return
+        }
+
+        if (!data || data.length === 0) break
+        
+        allData = [...allData, ...data]
+        
+        if (data.length < batchSize) break
+        start += batchSize
+      }
+
+      // Extract unique values from the combined dataset
+      const practiceTypes = Array.from(new Set(allData.map(row => row.practice_type).filter(Boolean))).sort()
+      const states = Array.from(new Set(allData.map(row => row.state).filter(Boolean))).sort()
+      const cities = Array.from(new Set(allData.map(row => row.city).filter(Boolean))).sort()
+
+      setAllPracticeTypes(practiceTypes as string[])
+      setAllStates(states as string[])
+      setAllCities(cities as string[])
+    } catch (error) {
+      console.error('❌ Error fetching dropdown options:', error)
     }
   }
 
-  // Persist saved searches to localStorage
-  const persistSavedSearches = (searches: SavedSearch[]) => {
-    if (typeof window === "undefined") return
-    try {
-      localStorage.setItem(SAVED_SEARCHES_STORAGE_KEY, JSON.stringify(searches))
-    } catch (err) {
-      console.error("Failed to persist saved searches", err)
-    }
-  }
-
-  // Save current search
-  const saveCurrentSearch = () => {
-    const trimmed = newSavedSearchName.trim()
-    if (!trimmed) {
-      setSaveError("Name is required")
-      return
-    }
-
-    const now = new Date().toISOString()
-    const newSavedSearch: SavedSearch = {
-      id: `${now}-${Math.random().toString(36).slice(2)}`,
-      name: trimmed,
-      filters,
-      createdAt: now,
-    }
-
-    const updated = [...savedSearches, newSavedSearch]
-    setSavedSearches(updated)
-    persistSavedSearches(updated)
-    setIsSaveDialogOpen(false)
-    setNewSavedSearchName("")
-    setSaveError(null)
-  }
-
-  // Apply saved search
-  const applySavedSearch = (search: SavedSearch) => {
-    onFiltersChange?.(search.filters)
-  }
-
-  // Delete saved search
-  const deleteSavedSearch = (searchId: string) => {
-    const updated = savedSearches.filter(search => search.id !== searchId)
-    setSavedSearches(updated)
-    persistSavedSearches(updated)
-  }
-
-  // Clear all saved searches
-  const clearSavedSearches = () => {
-    setSavedSearches([])
-    persistSavedSearches([])
-  }
-
-  // Load saved searches on component mount
+  // Load dropdown options on component mount
   useEffect(() => {
-    loadSavedSearches()
+    fetchAllDropdownOptions()
   }, [])
 
 
   // No client-side filtering needed - filtering is done at database level
   const filteredAndSortedLeads = leads
 
+  // Filtered dropdown options based on search terms
+  const filteredPracticeTypes = useMemo(() => {
+    if (!practiceTypeSearchTerm.trim()) return allPracticeTypes
+    const query = practiceTypeSearchTerm.toLowerCase()
+    return allPracticeTypes.filter(type => type.toLowerCase().includes(query))
+  }, [practiceTypeSearchTerm, allPracticeTypes])
 
-  // Check if any filters are active
-  const hasActiveFilters = useMemo(() => {
-    return (
-      !!filters.searchQuery ||
-      filters.selectedStates.length > 0 ||
-      filters.selectedCities.length > 0 ||
-      filters.selectedPracticeTypes.length > 0 ||
-      filters.sortField !== 'created_at' ||
-      filters.sortDir !== 'desc'
-    )
-  }, [filters])
+  const filteredStates = useMemo(() => {
+    if (!stateSearchTerm.trim()) return allStates
+    const query = stateSearchTerm.toLowerCase()
+    return allStates.filter(state => state.toLowerCase().includes(query))
+  }, [stateSearchTerm, allStates])
+
+  const filteredCities = useMemo(() => {
+    if (!citySearchTerm.trim()) return allCities
+    const query = citySearchTerm.toLowerCase()
+    return allCities.filter(city => city.toLowerCase().includes(query))
+  }, [citySearchTerm, allCities])
+
+
 
   const formatPhoneNumber = (phone: string) => {
     if (!phone || phone === 'N/A') return phone
@@ -277,203 +254,327 @@ export function ColdLeadsTable({
     }
   }
 
+  const isMobile = useIsMobile()
+
+  // Mobile Card View Component
+  const MobileLeadCard = ({ lead }: { lead: ColdLead }) => (
+    <Card 
+      className={`cursor-pointer transition-all border-0 shadow-none bg-transparent hover:bg-accent/50 ${
+        selectedLeadId === lead.id ? 'bg-primary/10' : ''
+      } ${
+        isLeadSelected(lead.id) ? 'bg-primary/5' : ''
+      }`}
+      onClick={() => onLeadSelect(lead)}
+    >
+      <CardContent className="p-2">
+        {/* Header with checkbox and company */}
+        <div className="flex items-center gap-2">
+          <Checkbox
+            checked={isLeadSelected(lead.id)}
+            onCheckedChange={(checked) => handleSelectLead(lead.id, checked as boolean)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4"
+          />
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-sm text-card-foreground truncate leading-tight">
+              {lead.company}
+            </h3>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span>{lead.contactName || 'none'}</span>
+              {(lead.city || lead.state) && (
+                <>
+                  <span>•</span>
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate">{getLocationString(lead.city, lead.state)}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="w-full space-y-4">
       {/* Search and Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-6">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-6">
+        {/* Search Bar */}
+        <div className="relative w-full md:flex-1 md:max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
             placeholder="Search leads, practices, or locations..."
             value={filters.searchQuery}
             onChange={(e) => onFiltersChange?.({ ...filters, searchQuery: e.target.value })}
-            className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
+            className="pl-10 h-11 md:h-9 bg-card border-border text-foreground placeholder:text-muted-foreground"
           />
         </div>
         
-        <div className="flex items-center gap-2">
-          <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                className="bg-card border-border text-foreground hover:bg-accent"
-                disabled={!hasActiveFilters}
-              >
-                <Save className="mr-2 h-4 w-4" />
-                Save Search
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Save Current Filters</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground" htmlFor="cold-leads-saved-search-name">
-                    Search Name
-                  </label>
-                  <Input
-                    id="cold-leads-saved-search-name"
-                    placeholder="e.g. Dallas Orthodontics"
-                    value={newSavedSearchName}
-                    onChange={(event) => {
-                      setNewSavedSearchName(event.target.value)
-                      if (saveError) {
-                        setSaveError(null)
-                      }
-                    }}
-                  />
-                  {saveError && (
-                    <p className="text-xs text-destructive">{saveError}</p>
-                  )}
-                </div>
-                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  <p className="mb-1 font-medium text-foreground">Filters to be saved:</p>
-                  <ul className="space-y-1">
-                    <li>
-                      <span className="font-medium">Search:</span> {filters.searchQuery || '—'}
-                    </li>
-                    <li>
-                      <span className="font-medium">States:</span> {filters.selectedStates.length ? filters.selectedStates.join(', ') : '—'}
-                    </li>
-                    <li>
-                      <span className="font-medium">Cities:</span> {filters.selectedCities.length ? filters.selectedCities.join(', ') : '—'}
-                    </li>
-                    <li>
-                      <span className="font-medium">Practice Types:</span> {filters.selectedPracticeTypes.length ? filters.selectedPracticeTypes.join(', ') : '—'}
-                    </li>
-                    <li>
-                      <span className="font-medium">Sort:</span> {filters.sortDir ? `${filters.sortField} (${filters.sortDir})` : 'Default'}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="ghost" onClick={() => setIsSaveDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={saveCurrentSearch}>Save Search</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="bg-card border-border text-foreground hover:bg-accent"
-                disabled={savedSearches.length === 0}
-              >
-                <Bookmark className="mr-2 h-4 w-4" />
-                Saved Searches
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-72">
-              <DropdownMenuLabel className="flex items-center justify-between">
-                <span>Saved Searches</span>
-                {savedSearches.length > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      clearSavedSearches()
-                    }}
-                  >
-                    Clear All
-                  </Button>
-                )}
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {savedSearches.length === 0 ? (
-                <div className="px-2 py-6 text-xs text-muted-foreground text-center">
-                  No saved searches yet.
-                </div>
-              ) : (
-                <div className="max-h-64 overflow-y-auto">
-                  {savedSearches.map((search) => (
-                    <div key={search.id} className="flex items-center gap-2 px-2 py-1.5">
-                      <DropdownMenuItem
-                        className="flex-1"
-                        onSelect={(event) => {
-                          event.preventDefault()
-                          applySavedSearch(search)
-                        }}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-foreground">
-                            {search.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(search.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem
-                            onSelect={(event) => {
-                              event.preventDefault()
-                              applySavedSearch(search)
-                            }}
-                          >
-                            Apply Filters
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onSelect={(event) => {
-                              event.preventDefault()
-                              deleteSavedSearch(search.id)
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {/* Filter Buttons - Wrap on Mobile */}
+        <div className="flex flex-wrap items-center gap-2">
 
           {/* Practice Type Filter */}
-          <SearchableDropdown
-            label="Practice Type"
-            placeholder="Search practice types..."
-            selectedValues={filters.selectedPracticeTypes}
-            onSelectionChange={(values) => onFiltersChange?.({ ...filters, selectedPracticeTypes: values })}
-            onSearch={searchPracticeTypes}
-          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="bg-card border-border text-foreground hover:bg-accent h-11 md:h-9"
+              >
+                <span className="hidden sm:inline">Practice Type</span>
+                <span className="sm:hidden">Type</span>
+                {filters.selectedPracticeTypes.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                    {filters.selectedPracticeTypes.length}
+                  </Badge>
+                )}
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] bg-popover border-border" align="end">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-foreground">Practice Types</h4>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={practiceTypeSearchTerm}
+                      onChange={(event) => setPracticeTypeSearchTerm(event.target.value)}
+                      placeholder="Search practice types..."
+                      className="pl-9 bg-card border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                    {practiceTypeSearchTerm && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                        onClick={() => setPracticeTypeSearchTerm("")}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {filteredPracticeTypes.length > 0 ? (
+                        filteredPracticeTypes.map((type) => (
+                          <div key={type} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`practice-${type}`}
+                              checked={filters.selectedPracticeTypes.includes(type)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  onFiltersChange?.({ ...filters, selectedPracticeTypes: [...filters.selectedPracticeTypes, type] })
+                                } else {
+                                  onFiltersChange?.({ ...filters, selectedPracticeTypes: filters.selectedPracticeTypes.filter(t => t !== type) })
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`practice-${type}`}
+                              className="text-sm text-foreground cursor-pointer flex-1"
+                            >
+                              {type}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-6">No practice types found</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+                
+                {filters.selectedPracticeTypes.length > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onFiltersChange?.({ ...filters, selectedPracticeTypes: [] })}
+                      className="w-full text-xs"
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* State Filter */}
-          <SearchableDropdown
-            label="State"
-            placeholder="Search states..."
-            selectedValues={filters.selectedStates}
-            onSelectionChange={(values) => onFiltersChange?.({ ...filters, selectedStates: values })}
-            onSearch={searchStates}
-          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="bg-card border-border text-foreground hover:bg-accent h-11 md:h-9"
+              >
+                State
+                {filters.selectedStates.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                    {filters.selectedStates.length}
+                  </Badge>
+                )}
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] bg-popover border-border" align="end">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-foreground">States</h4>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={stateSearchTerm}
+                      onChange={(event) => setStateSearchTerm(event.target.value)}
+                      placeholder="Search states..."
+                      className="pl-9 bg-card border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                    {stateSearchTerm && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                        onClick={() => setStateSearchTerm("")}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {filteredStates.length > 0 ? (
+                        filteredStates.map((state) => (
+                          <div key={state} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`state-${state}`}
+                              checked={filters.selectedStates.includes(state)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  onFiltersChange?.({ ...filters, selectedStates: [...filters.selectedStates, state] })
+                                } else {
+                                  onFiltersChange?.({ ...filters, selectedStates: filters.selectedStates.filter(s => s !== state) })
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`state-${state}`}
+                              className="text-sm text-foreground cursor-pointer flex-1"
+                            >
+                              {state}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-6">No states found</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+                
+                {filters.selectedStates.length > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onFiltersChange?.({ ...filters, selectedStates: [] })}
+                      className="w-full text-xs"
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* City Filter */}
-          <SearchableDropdown
-            label="City"
-            placeholder="Search cities..."
-            selectedValues={filters.selectedCities}
-            onSelectionChange={(values) => onFiltersChange?.({ ...filters, selectedCities: values })}
-            onSearch={searchCities}
-          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="bg-card border-border text-foreground hover:bg-accent h-11 md:h-9"
+              >
+                City
+                {filters.selectedCities.length > 0 && (
+                  <Badge variant="secondary" className="ml-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                    {filters.selectedCities.length}
+                  </Badge>
+                )}
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] bg-popover border-border" align="end">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-foreground">Cities</h4>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={citySearchTerm}
+                      onChange={(event) => setCitySearchTerm(event.target.value)}
+                      placeholder="Search cities..."
+                      className="pl-9 bg-card border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                    {citySearchTerm && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                        onClick={() => setCitySearchTerm("")}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {filteredCities.length > 0 ? (
+                        filteredCities.map((city) => (
+                          <div key={city} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`city-${city}`}
+                              checked={filters.selectedCities.includes(city)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  onFiltersChange?.({ ...filters, selectedCities: [...filters.selectedCities, city] })
+                                } else {
+                                  onFiltersChange?.({ ...filters, selectedCities: filters.selectedCities.filter(c => c !== city) })
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`city-${city}`}
+                              className="text-sm text-foreground cursor-pointer flex-1"
+                            >
+                              {city}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-6">No cities found</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+                
+                {filters.selectedCities.length > 0 && (
+                  <div className="pt-2 border-t border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onFiltersChange?.({ ...filters, selectedCities: [] })}
+                      className="w-full text-xs"
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
 
-          {/* Results Count */}
-          <div className="text-sm text-muted-foreground">
-            {filteredAndSortedLeads.length} of {leads.length} leads
+          {/* Results Count - Show on larger screens only */}
+          <div className="hidden md:block text-sm text-muted-foreground whitespace-nowrap">
+            {filteredAndSortedLeads.length} results
           </div>
         </div>
       </div>
@@ -510,7 +611,16 @@ export function ColdLeadsTable({
       )}
 
 
-      {/* Table */}
+      {/* Leads Display - Cards on Mobile, Table on Desktop */}
+      {isMobile ? (
+        // Mobile Card View
+        <div className="space-y-0">
+          {filteredAndSortedLeads.map((lead) => (
+            <MobileLeadCard key={lead.id} lead={lead} />
+          ))}
+        </div>
+      ) : (
+        // Desktop Table View
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <Table>
             <TableHeader>
@@ -521,7 +631,7 @@ export function ColdLeadsTable({
                     onCheckedChange={handleSelectAll}
                     ref={(el) => {
                       if (el) {
-                        el.indeterminate = isPartiallySelected()
+                          (el as any).indeterminate = isPartiallySelected()
                       }
                     }}
                   />
@@ -586,6 +696,7 @@ export function ColdLeadsTable({
           </TableBody>
         </Table>
       </div>
+      )}
 
       {/* Pagination Controls */}
       {onPageChange && onPageSizeChange && (

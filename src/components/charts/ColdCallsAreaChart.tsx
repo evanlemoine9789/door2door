@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { fetchJustCallChartData, JustCallChartData } from "@/lib/supabase-justcall"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 const chartConfig = {
   callsMade: { label: "Calls Made", color: "#3b82f6" },
@@ -36,6 +37,7 @@ export function ColdCallsAreaChart() {
   const [timeRange, setTimeRange] = React.useState<"90d" | "30d" | "7d">("90d")
   const [chartData, setChartData] = React.useState<JustCallChartData[]>([])
   const [loading, setLoading] = React.useState(false)
+  const isMobile = useIsMobile()
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -66,13 +68,13 @@ export function ColdCallsAreaChart() {
 
   return (
     <Card className="pt-0">
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-3 md:py-5 flex-col md:flex-row">
         <div className="grid flex-1 gap-1">
-          <CardTitle>Cold Calls — Daily Trend</CardTitle>
-          <CardDescription>Calls made and meetings booked</CardDescription>
+          <CardTitle className="text-lg md:text-xl">Cold Calls — Daily Trend</CardTitle>
+          <CardDescription className="text-sm">Calls made and meetings booked</CardDescription>
         </div>
         <Select value={timeRange} onValueChange={(v) => setTimeRange(v as any)}>
-          <SelectTrigger className="hidden w-[160px] rounded-lg sm:ml-auto sm:flex" aria-label="Select a range">
+          <SelectTrigger className="w-full md:w-[160px] h-9 md:h-10 rounded-lg md:ml-auto" aria-label="Select a range">
             <SelectValue placeholder="Last 3 months" />
           </SelectTrigger>
           <SelectContent className="rounded-xl">
@@ -83,13 +85,13 @@ export function ColdCallsAreaChart() {
         </Select>
       </CardHeader>
 
-      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+      <CardContent className="px-2 pt-3 md:pt-4 md:px-6">
         {loading ? (
-          <div className="flex items-center justify-center h-[250px]">
+          <div className="flex items-center justify-center h-[200px] md:h-[250px]">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
+          <ChartContainer config={chartConfig} className="aspect-auto h-[200px] md:h-[250px] w-full">
             <AreaChart data={chartData}>
             <defs>
               <linearGradient id="fillCallsMade" x1="0" y1="0" x2="0" y2="1">
