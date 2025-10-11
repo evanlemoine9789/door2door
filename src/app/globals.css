@@ -221,23 +221,52 @@
   transition: transform 0.1s ease;
 }
 
-/* Prevent iOS Safari auto-zoom on inputs */
+/* Prevent iOS Safari auto-zoom on inputs - COMPREHENSIVE FIX */
 input, textarea, select {
   font-size: 16px !important;
+  -webkit-text-size-adjust: 100% !important;
+  -webkit-appearance: none !important;
+  border-radius: 0 !important;
 }
 
-/* Mobile input optimizations */
+/* Mobile input optimizations - More aggressive approach */
 @media screen and (max-width: 768px) {
   input, textarea, select {
     font-size: 16px !important;
+    -webkit-text-size-adjust: 100% !important;
     transform: translateZ(0); /* Force hardware acceleration */
-    -webkit-appearance: none;
-    border-radius: 0;
+    -webkit-appearance: none !important;
+    border-radius: 0 !important;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-user-select: text !important;
   }
   
   input:focus, textarea:focus, select:focus {
+    font-size: 16px !important;
     transform: translateZ(0);
-    -webkit-tap-highlight-color: transparent;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-text-size-adjust: 100% !important;
+  }
+  
+  /* Specific fix for the notes input */
+  input[placeholder*="note"], input[placeholder*="Note"] {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100% !important;
+    -webkit-appearance: none !important;
+  }
+  
+  /* Additional iOS Safari zoom prevention */
+  body {
+    -webkit-text-size-adjust: 100% !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+  
+  /* Allow text selection in inputs only */
+  input, textarea, select {
+    -webkit-user-select: text !important;
+    user-select: text !important;
   }
 }
 

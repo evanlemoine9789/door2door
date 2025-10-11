@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MobileDateTimePicker } from '@/components/ui/mobile-datetime-picker'
 import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare, Save, Bookmark, Trash2, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { usePreventZoom } from '@/hooks/use-prevent-zoom'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -68,6 +69,7 @@ export default function MobileDialerPage() {
   const [newSavedSearchName, setNewSavedSearchName] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const isMobile = useIsMobile()
+  usePreventZoom() // Prevent iOS Safari zoom on inputs
 
   // Filter states
   const [selectedPracticeTypes, setSelectedPracticeTypes] = useState<Set<string>>(new Set())

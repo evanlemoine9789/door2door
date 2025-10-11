@@ -25,6 +25,8 @@ export const metadata: Metadata = {
     maximumScale: 1, // Prevent auto-zoom on inputs
     userScalable: false, // Disable pinch-to-zoom to prevent input zoom
     viewportFit: "cover", // For iPhone notch/Dynamic Island support
+    // Additional iOS Safari zoom prevention
+    shrinkToFit: false,
   },
   appleWebApp: {
     capable: true,
