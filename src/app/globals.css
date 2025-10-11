@@ -26,6 +26,183 @@
   }
 }
 
+/* Mobile-optimized rainbow slide animation */
+@keyframes rainbowSlide {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 0%;
+  }
+}
+
+@-webkit-keyframes rainbowSlide {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 0%;
+  }
+}
+
+@-moz-keyframes rainbowSlide {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 0%;
+  }
+}
+
+@-o-keyframes rainbowSlide {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 0%;
+  }
+}
+
+/* Rainbow pulse animation for extra dopamine hit */
+@keyframes rainbowPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@-webkit-keyframes rainbowPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.02);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+/* Rainbow gradient utility class for mobile */
+.rainbow-gradient {
+  background: linear-gradient(90deg, 
+    #ff0000 0%, 
+    #ff7f00 14.28%, 
+    #ffff00 28.57%, 
+    #00ff00 42.85%, 
+    #0000ff 57.14%, 
+    #4b0082 71.42%, 
+    #9400d3 85.71%, 
+    #ff0000 100%
+  );
+  background-size: 200% 100%;
+  animation: 
+    rainbowSlide 2s ease-in-out infinite alternate,
+    rainbowPulse 1.5s ease-in-out infinite;
+  -webkit-animation: 
+    rainbowSlide 2s ease-in-out infinite alternate,
+    rainbowPulse 1.5s ease-in-out infinite;
+  -moz-animation: 
+    rainbowSlide 2s ease-in-out infinite alternate,
+    rainbowPulse 1.5s ease-in-out infinite;
+  -o-animation: 
+    rainbowSlide 2s ease-in-out infinite alternate,
+    rainbowPulse 1.5s ease-in-out infinite;
+}
+
+/* Rainbow Border Animation */
+@keyframes rainbowBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@-webkit-keyframes rainbowBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@-moz-keyframes rainbowBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@-o-keyframes rainbowBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.rainbow-border {
+  position: relative;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.rainbow-border::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(
+    90deg,
+    #ff0000 0%,
+    #ff7f00 14.28%,
+    #ffff00 28.57%,
+    #00ff00 42.85%,
+    #0000ff 57.14%,
+    #4b0082 71.42%,
+    #9400d3 85.71%,
+    #ff0000 100%
+  );
+  background-size: 200% 100%;
+  border-radius: inherit;
+  z-index: -1;
+  animation: rainbowBorder 3s ease-in-out infinite;
+  -webkit-animation: rainbowBorder 3s ease-in-out infinite;
+  -moz-animation: rainbowBorder 3s ease-in-out infinite;
+  -o-animation: rainbowBorder 3s ease-in-out infinite;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

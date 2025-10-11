@@ -12,7 +12,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer'
-import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MobileDateTimePicker } from '@/components/ui/mobile-datetime-picker'
 import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare, Save, Bookmark, Trash2, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from 'sonner'
@@ -33,13 +34,6 @@ interface ColdLead {
   lastDisposition?: string
 }
 
-interface PendingCall {
-  leadId: string
-  phoneNumber: string
-  company: string
-  contactName: string
-  timestamp: string
-}
 
 interface SavedSearch {
   id: string
@@ -61,14 +55,14 @@ export default function MobileDialerPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [showDispositionModal, setShowDispositionModal] = useState(false)
-  const [currentCallData, setCurrentCallData] = useState<PendingCall | null>(null)
-  const [selectedDisposition, setSelectedDisposition] = useState<string>('')
-  const [notes, setNotes] = useState('')
   const [selectedLead, setSelectedLead] = useState<ColdLead | null>(null)
   const [leadNotes, setLeadNotes] = useState<any[]>([])
   const [newNoteText, setNewNoteText] = useState('')
   const [isSavingNote, setIsSavingNote] = useState(false)
+  const [callOutcome, setCallOutcome] = useState<string>("")
+  const [meetingDate, setMeetingDate] = useState<Date | undefined>()
+  const [bookedWith, setBookedWith] = useState<string>("")
+  const [isSaving, setIsSaving] = useState(false)
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
   const [newSavedSearchName, setNewSavedSearchName] = useState('')
@@ -94,26 +88,6 @@ export default function MobileDialerPage() {
     loadSavedSearches()
   }, [])
 
-  // Check for pending call on mount and visibility change
-  useEffect(() => {
-    const checkPendingCall = () => {
-      if (document.visibilityState === 'visible') {
-        const pendingCall = localStorage.getItem('pendingCall')
-        if (pendingCall) {
-          const callData = JSON.parse(pendingCall) as PendingCall
-          setCurrentCallData(callData)
-          setShowDispositionModal(true)
-        }
-      }
-    }
-
-    // Check on mount
-    checkPendingCall()
-
-    // Listen for visibility changes
-    document.addEventListener('visibilitychange', checkPendingCall)
-    return () => document.removeEventListener('visibilitychange', checkPendingCall)
-  }, [])
 
   // Fetch notes when a lead is selected
   useEffect(() => {
@@ -123,6 +97,20 @@ export default function MobileDialerPage() {
       setLeadNotes([])
     }
   }, [selectedLead])
+
+  // Auto-update call status for any outcome
+  useEffect(() => {
+    if (callOutcome && selectedLead) {
+      updateCallStatus(callOutcome)
+      
+      // Reset local state when Clear Status is selected
+      if (callOutcome === "Clear Status") {
+        setCallOutcome("")
+        setMeetingDate(undefined)
+        setBookedWith("")
+      }
+    }
+  }, [callOutcome])
 
   const fetchLeads = async () => {
     try {
@@ -205,71 +193,115 @@ export default function MobileDialerPage() {
   }
 
   const handleCallClick = (lead: ColdLead) => {
-    // Store pending call in localStorage
-    const pendingCall: PendingCall = {
-      leadId: lead.id,
-      phoneNumber: lead.phoneNumber,
-      company: lead.company,
-      contactName: lead.contactName,
-      timestamp: new Date().toISOString()
-    }
-    localStorage.setItem('pendingCall', JSON.stringify(pendingCall))
-
     // Trigger native phone call
     window.location.href = `tel:${lead.phoneNumber}`
   }
 
-  const handleDispositionSelect = (disposition: string) => {
-    setSelectedDisposition(disposition)
+  const updateCallStatus = async (outcome: string) => {
+    if (!selectedLead) return
+
+    try {
+      // Conditional logic for Clear Status
+      const updateData = outcome === "Clear Status" 
+        ? { call_status: null } // Only clear call_status, leave call_date unchanged
+        : { 
+            call_status: outcome, 
+            call_date: new Date().toISOString() 
+          } // Set both call_status and call_date for other outcomes
+
+      const { error } = await supabase
+        .from('cold_leads')
+        .update(updateData)
+        .eq('id', selectedLead.id)
+
+      if (error) throw error
+
+      // Show appropriate success message
+      const successMessage = outcome === "Clear Status" 
+        ? "Call status cleared"
+        : "Call status updated"
+      toast.success(successMessage)
+
+      // Refresh lead list to show updated status
+      fetchLeads()
+    } catch (error) {
+      console.error('Error updating call status:', error)
+      toast.error('Failed to update call status')
+    }
   }
 
-  const saveCallLog = async () => {
-    if (!currentCallData || !selectedDisposition) {
-      toast.error('Please select a disposition')
+  const scheduleEngagedLead = async () => {
+    if (!selectedLead || !meetingDate) {
+      toast.error('Please select a meeting date and time')
       return
     }
 
+    setIsSaving(true)
+    
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      // Get user profile for organization_id
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('organization_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!userProfile) throw new Error('User profile not found')
+
+      // Format meeting date and time
+      const meetingDateOnly = meetingDate.toISOString().split('T')[0] // YYYY-MM-DD
+      const meetingTimeOnly = meetingDate.toTimeString().split(' ')[0] // HH:MM:SS
+
+      // Insert new record into engaged_leads table
       const { error } = await supabase
-        .from('mobile_call_logs')
+        .from('engaged_leads')
         .insert({
-          cold_lead_id: currentCallData.leadId,
-          phone_number: currentCallData.phoneNumber,
-          disposition: selectedDisposition,
-          notes: notes.trim() || null
+          company_name: selectedLead.company,
+          owner_name: selectedLead.contactName,
+          phone_number: selectedLead.phoneNumber,
+          address: selectedLead.address || null,
+          city: selectedLead.city || null,
+          state: selectedLead.state || null,
+          practice_type: selectedLead.practiceType || null,
+          url: selectedLead.website || null,
+          meeting_date: meetingDateOnly,
+          meeting_time: meetingTimeOnly,
+          date_booked: new Date().toISOString().split('T')[0],
+          booked_with: bookedWith.trim() || null,
+          meeting_status: 'scheduled',
+          lead_source: 'Cold Call',
+          user_id: user.id,
+          organization_id: userProfile.organization_id
         })
 
       if (error) throw error
 
-      // Clear pending call
-      localStorage.removeItem('pendingCall')
+      // Show success message
+      toast.success('Meeting scheduled successfully!')
 
-      // Close modal
-      setShowDispositionModal(false)
-      setCurrentCallData(null)
-      setSelectedDisposition('')
-      setNotes('')
+      // Close the drawer
+      setSelectedLead(null)
+      
+      // Reset form state
+      setCallOutcome('')
+      setMeetingDate(undefined)
+      setBookedWith('')
 
-      // Show success
-      toast.success('Call logged successfully')
-
-      // Refresh lead list
+      // Refresh lead list to show updated call count
       fetchLeads()
     } catch (error) {
-      console.error('Error saving call log:', error)
-      toast.error('Failed to log call')
+      console.error('Error scheduling engaged lead:', error)
+      toast.error('Failed to schedule meeting')
+      // Keep drawer open if error occurs
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  const handleCancel = () => {
-    if (confirm('Cancel without logging this call?')) {
-      localStorage.removeItem('pendingCall')
-      setShowDispositionModal(false)
-      setCurrentCallData(null)
-      setSelectedDisposition('')
-      setNotes('')
-    }
-  }
 
   // Fetch notes for a specific lead
   const fetchLeadNotes = async (leadId: string) => {
@@ -968,103 +1000,6 @@ export default function MobileDialerPage() {
           </SheetContent>
         </Sheet>
 
-      {/* Disposition Modal */}
-      <Dialog open={showDispositionModal} onOpenChange={setShowDispositionModal}>
-        <DialogContent className="max-w-lg">
-          <DialogTitle>Log Call</DialogTitle>
-          <DialogDescription className="sr-only">
-            Select a call disposition and add notes
-          </DialogDescription>
-          
-          <div className="space-y-4">
-            <div>
-              <p className="font-semibold">{currentCallData?.company}</p>
-              <p className="text-sm text-muted-foreground">{currentCallData?.contactName}</p>
-              <p className="text-sm text-muted-foreground">
-                {formatPhoneNumber(currentCallData?.phoneNumber || '')}
-              </p>
-            </div>
-            
-            {/* Disposition Buttons */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Call Outcome</label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button 
-                  onClick={() => handleDispositionSelect('Booked')} 
-                  variant={selectedDisposition === 'Booked' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  Booked
-                </Button>
-                <Button 
-                  onClick={() => handleDispositionSelect('Not Booked')} 
-                  variant={selectedDisposition === 'Not Booked' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  Not Booked
-                </Button>
-                <Button 
-                  onClick={() => handleDispositionSelect('No Connect')} 
-                  variant={selectedDisposition === 'No Connect' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  No Connect
-                </Button>
-                <Button 
-                  onClick={() => handleDispositionSelect('Email')} 
-                  variant={selectedDisposition === 'Email' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  Email
-                </Button>
-                <Button 
-                  onClick={() => handleDispositionSelect('Do Not Call')} 
-                  variant={selectedDisposition === 'Do Not Call' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  Do Not Call
-                </Button>
-                <Button 
-                  onClick={() => handleDispositionSelect('Clear Status')} 
-                  variant={selectedDisposition === 'Clear Status' ? 'default' : 'outline'}
-                  className="h-11"
-                >
-                  Clear Status
-                </Button>
-              </div>
-            </div>
-            
-            {/* Notes */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Notes (Optional)</label>
-              <Textarea
-                placeholder="Add notes about this call..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-              />
-            </div>
-            
-            {/* Actions */}
-            <div className="flex gap-2">
-              <Button 
-                onClick={saveCallLog} 
-                className="flex-1 h-11"
-                disabled={!selectedDisposition}
-              >
-                Save Call Log
-              </Button>
-              <Button 
-                onClick={handleCancel} 
-                variant="outline"
-                className="h-11"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Lead Details Drawer */}
       <Drawer 
@@ -1153,7 +1088,7 @@ export default function MobileDialerPage() {
                       )}
                       
                       {selectedLead.website && (
-                        <div className="pt-4">
+                        <div className="pt-4 space-y-3">
                           <Button
                             variant="outline"
                             size="default"
@@ -1168,10 +1103,71 @@ export default function MobileDialerPage() {
                             <Globe className="h-5 w-5 mr-2" />
                             Visit Website
                           </Button>
+                          
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {/* Call Outcome Dropdown */}
+                  <div className="pt-4">
+                    <Select value={callOutcome} onValueChange={setCallOutcome}>
+                      <SelectTrigger className="w-full h-12">
+                        <SelectValue placeholder="Select Call Outcome" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Booked">Booked</SelectItem>
+                        <SelectItem value="Not Booked">Not Booked</SelectItem>
+                        <SelectItem value="No Connect">No Connect</SelectItem>
+                        <SelectItem value="Email">Email</SelectItem>
+                        <SelectItem value="Clear Status">Clear Status</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Booking Fields - Only show when "Booked" is selected */}
+                  {callOutcome === "Booked" && (
+                    <div className="pt-4 space-y-4">
+                      {/* Meeting Date & Time */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-card-foreground">Meeting Date & Time</label>
+                        <MobileDateTimePicker 
+                          date={meetingDate} 
+                          setDate={setMeetingDate} 
+                          label="Select meeting date and time"
+                          placeholder="Select meeting date and time..."
+                        />
+                      </div>
+                      
+                      {/* Booked With */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-card-foreground">Booked With</label>
+                        <Input
+                          type="text"
+                          placeholder="Enter name of person booked with"
+                          value={bookedWith}
+                          onChange={(e) => setBookedWith(e.target.value)}
+                          className="h-12"
+                        />
+                      </div>
+
+                      {/* Schedule Meeting Button */}
+                      <div className="pt-2">
+                        <Button
+                          onClick={scheduleEngagedLead}
+                          disabled={!meetingDate || isSaving}
+                          className={cn(
+                            "w-full h-12 text-white font-semibold transition-all duration-200",
+                            (!meetingDate || isSaving)
+                              ? "bg-gray-600 opacity-50 cursor-not-allowed" 
+                              : "bg-gray-800 hover:bg-gray-700 cursor-pointer rainbow-border"
+                          )}
+                        >
+                          {isSaving ? "Scheduling..." : "Schedule Meeting"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes Section */}
                   <div className="pt-6 border-t border-border">

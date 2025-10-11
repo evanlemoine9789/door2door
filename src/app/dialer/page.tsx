@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -1395,6 +1395,9 @@ export default function DialerPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Save Current Filters</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Save your current search filters for quick access later
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -2696,6 +2699,9 @@ export default function DialerPage() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Lead Information</DialogTitle>
+            <DialogDescription className="sr-only">
+              Update the contact and company details for this lead
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="space-y-2">
