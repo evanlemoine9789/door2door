@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer'
 import { Textarea } from '@/components/ui/textarea'
-import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare } from 'lucide-react'
+import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare, Save, Bookmark, Trash2, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -30,6 +30,7 @@ interface ColdLead {
   callCount?: number
   website?: string
   address?: string
+  lastDisposition?: string
 }
 
 interface PendingCall {
@@ -39,6 +40,21 @@ interface PendingCall {
   contactName: string
   timestamp: string
 }
+
+interface SavedSearch {
+  id: string
+  name: string
+  filters: {
+    searchQuery: string
+    selectedPracticeTypes: string[]
+    selectedStates: string[]
+    selectedCities: string[]
+    selectedDispositions: string[]
+  }
+  createdAt: string
+}
+
+const SAVED_SEARCHES_STORAGE_KEY = "dialer_mobile_saved_searches"
 
 export default function MobileDialerPage() {
   const [leads, setLeads] = useState<ColdLead[]>([])
@@ -53,22 +69,29 @@ export default function MobileDialerPage() {
   const [leadNotes, setLeadNotes] = useState<any[]>([])
   const [newNoteText, setNewNoteText] = useState('')
   const [isSavingNote, setIsSavingNote] = useState(false)
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
+  const [newSavedSearchName, setNewSavedSearchName] = useState('')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const isMobile = useIsMobile()
 
   // Filter states
   const [selectedPracticeTypes, setSelectedPracticeTypes] = useState<Set<string>>(new Set())
   const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set())
   const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set())
+  const [selectedDispositions, setSelectedDispositions] = useState<Set<string>>(new Set())
   const [allPracticeTypes, setAllPracticeTypes] = useState<string[]>([])
   const [allStates, setAllStates] = useState<string[]>([])
   const [allCities, setAllCities] = useState<string[]>([])
   const [isPracticeFilterOpen, setIsPracticeFilterOpen] = useState(false)
   const [isStateFilterOpen, setIsStateFilterOpen] = useState(false)
   const [isCityFilterOpen, setIsCityFilterOpen] = useState(false)
+  const [isDispositionFilterOpen, setIsDispositionFilterOpen] = useState(false)
 
   // Fetch leads on mount
   useEffect(() => {
     fetchLeads()
+    loadSavedSearches()
   }, [])
 
   // Check for pending call on mount and visibility change
@@ -143,7 +166,8 @@ export default function MobileDialerPage() {
           website: lead.website || '',
           address: lead.address || '',
           lastCallDate: lastCall?.call_timestamp,
-          callCount: leadCallLogs.length
+          callCount: leadCallLogs.length,
+          lastDisposition: lastCall?.disposition || 'Never Called'
         }
       }).filter(Boolean) as ColdLead[]
 
@@ -170,6 +194,7 @@ export default function MobileDialerPage() {
       setSelectedPracticeTypes(new Set(practiceTypes))
       setSelectedStates(new Set(states))
       setSelectedCities(new Set(cities))
+      setSelectedDispositions(new Set(['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status']))
 
     } catch (error) {
       console.error('Error fetching leads:', error)
@@ -350,6 +375,73 @@ export default function MobileDialerPage() {
     }
   }
 
+  // Save search functionality
+  const loadSavedSearches = () => {
+    if (typeof window === "undefined") return
+    try {
+      const raw = localStorage.getItem(SAVED_SEARCHES_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as SavedSearch[]
+      setSavedSearches(parsed)
+    } catch (err) {
+      console.error("Failed to load saved searches", err)
+    }
+  }
+
+  const persistSavedSearches = (searches: SavedSearch[]) => {
+    if (typeof window === "undefined") return
+    try {
+      localStorage.setItem(SAVED_SEARCHES_STORAGE_KEY, JSON.stringify(searches))
+    } catch (err) {
+      console.error("Failed to persist saved searches", err)
+    }
+  }
+
+  const saveCurrentSearch = () => {
+    const trimmed = newSavedSearchName.trim()
+    if (!trimmed) {
+      setSaveError("Name is required")
+      return
+    }
+
+    const now = new Date().toISOString()
+    const newSavedSearch: SavedSearch = {
+      id: `${now}-${Math.random().toString(36).slice(2)}`,
+      name: trimmed,
+      filters: {
+        searchQuery,
+        selectedPracticeTypes: Array.from(selectedPracticeTypes),
+        selectedStates: Array.from(selectedStates),
+        selectedCities: Array.from(selectedCities),
+        selectedDispositions: Array.from(selectedDispositions)
+      },
+      createdAt: now,
+    }
+
+    const updated = [...savedSearches, newSavedSearch]
+    setSavedSearches(updated)
+    persistSavedSearches(updated)
+    setIsSaveDialogOpen(false)
+    setNewSavedSearchName('')
+    setSaveError(null)
+    toast.success('Search saved successfully')
+  }
+
+  const applySavedSearch = (search: SavedSearch) => {
+    setSearchQuery(search.filters.searchQuery)
+    setSelectedPracticeTypes(new Set(search.filters.selectedPracticeTypes))
+    setSelectedStates(new Set(search.filters.selectedStates))
+    setSelectedCities(new Set(search.filters.selectedCities))
+    setSelectedDispositions(new Set(search.filters.selectedDispositions || ['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status']))
+  }
+
+  const deleteSavedSearch = (searchId: string) => {
+    const updated = savedSearches.filter(search => search.id !== searchId)
+    setSavedSearches(updated)
+    persistSavedSearches(updated)
+    toast.success('Search deleted')
+  }
+
   const formatPhoneNumber = (phone: string) => {
     if (!phone || phone === 'N/A') return phone
     const cleaned = phone.replace(/\D/g, '')
@@ -390,9 +482,14 @@ export default function MobileDialerPage() {
         return false
       }
 
+      // Disposition filter
+      if (selectedDispositions.size > 0 && !selectedDispositions.has(lead.lastDisposition || 'Never Called')) {
+        return false
+      }
+
       return true
     })
-  }, [leads, searchQuery, selectedPracticeTypes, selectedStates, selectedCities])
+  }, [leads, searchQuery, selectedPracticeTypes, selectedStates, selectedCities, selectedDispositions])
 
   const handlePracticeTypeChange = (practiceType: string, checked: boolean) => {
     setSelectedPracticeTypes(prev => {
@@ -430,6 +527,18 @@ export default function MobileDialerPage() {
     })
   }
 
+  const handleDispositionChange = (disposition: string, checked: boolean) => {
+    setSelectedDispositions(prev => {
+      const newSet = new Set(prev)
+      if (checked) {
+        newSet.add(disposition)
+      } else {
+        newSet.delete(disposition)
+      }
+      return newSet
+    })
+  }
+
   // Redirect non-mobile users
   if (!isMobile) {
     return (
@@ -446,15 +555,28 @@ export default function MobileDialerPage() {
     <div className="fixed inset-0 flex flex-col overflow-hidden pb-16">
       {/* Search Bar - Fixed at top */}
       <div className="flex-shrink-0 p-4 bg-background border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            type="text"
-            placeholder="Search leads..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-11"
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="Search leads..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-11"
+            />
+          </div>
+          <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-11 w-11 p-0"
+                title="Filters"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+          </Sheet>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">
           {filteredLeads.length} of {leads.length} leads
@@ -527,20 +649,70 @@ export default function MobileDialerPage() {
         )}
       </div>
 
-      {/* Filter Button - Fixed at bottom right */}
-      <div className="absolute bottom-20 right-4 z-[1000]">
-        <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <SheetTrigger asChild>
-            <Button
-              className="h-12 w-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-              title="Filters"
-            >
-              <Filter className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="h-[80vh] flex flex-col">
-            <SheetTitle className="text-lg font-semibold flex-shrink-0">Filters</SheetTitle>
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+      {/* Filters Sheet */}
+      <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+        <SheetContent side="bottom" className="h-[80vh] flex flex-col">
+            <div className="flex-shrink-0 px-6 py-4 border-b border-border">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="text-lg font-semibold">Filters</SheetTitle>
+                <div className="flex items-center gap-2">
+                  {/* Saved Searches Dropdown */}
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => {
+                        // Toggle saved searches visibility
+                      }}
+                    >
+                      <Bookmark className="h-3 w-3 mr-1" />
+                      Saved ({savedSearches.length})
+                    </Button>
+                  </div>
+                  
+                  {/* Save Search Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setIsSaveDialogOpen(true)}
+                  >
+                    <Save className="h-3 w-3 mr-1" />
+                    Save
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Saved Searches List */}
+              {savedSearches.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {savedSearches.map((search) => (
+                    <div key={search.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                      <button
+                        onClick={() => {
+                          applySavedSearch(search)
+                          setIsFilterOpen(false)
+                        }}
+                        className="flex-1 text-left text-sm text-foreground hover:text-primary"
+                      >
+                        {search.name}
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => deleteSavedSearch(search.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               
               {/* Practice Type Filter */}
               <Collapsible open={isPracticeFilterOpen} onOpenChange={setIsPracticeFilterOpen}>
@@ -731,10 +903,70 @@ export default function MobileDialerPage() {
                 </CollapsibleContent>
               </Collapsible>
 
+              {/* Call Disposition Filter */}
+              <Collapsible open={isDispositionFilterOpen} onOpenChange={setIsDispositionFilterOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between p-3 h-auto hover:bg-muted/50 border border-border rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-card-foreground">
+                        Call Disposition
+                      </h3>
+                      <span className="text-xs text-muted-foreground">
+                        ({selectedDispositions.size} selected)
+                      </span>
+                    </div>
+                    {isDispositionFilterOpen ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-2 pb-2">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        {selectedDispositions.size} of 6 selected
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDispositions(new Set())}
+                        className="text-xs h-7 px-2"
+                      >
+                        Deselect All
+                      </Button>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      {['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status'].map((disposition) => (
+                        <div key={disposition} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`disposition-${disposition}`}
+                            checked={selectedDispositions.has(disposition)}
+                            onCheckedChange={(checked) => 
+                              handleDispositionChange(disposition, checked as boolean)
+                            }
+                          />
+                          <label 
+                            htmlFor={`disposition-${disposition}`}
+                            className="text-sm text-card-foreground cursor-pointer"
+                          >
+                            {disposition}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
             </div>
           </SheetContent>
         </Sheet>
-      </div>
 
       {/* Disposition Modal */}
       <Dialog open={showDispositionModal} onOpenChange={setShowDispositionModal}>
@@ -1033,6 +1265,64 @@ export default function MobileDialerPage() {
           )}
         </DrawerContent>
       </Drawer>
+
+      {/* Save Search Dialog */}
+      <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Save Search</DialogTitle>
+          <DialogDescription>
+            Save your current search filters for future use.
+          </DialogDescription>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="search-name" className="text-sm font-medium">
+                Search Name
+              </label>
+              <Input
+                id="search-name"
+                placeholder="e.g. Dallas Orthodontics"
+                value={newSavedSearchName}
+                onChange={(e) => {
+                  setNewSavedSearchName(e.target.value)
+                  if (saveError) setSaveError(null)
+                }}
+                className="h-11"
+              />
+              {saveError && (
+                <p className="text-sm text-destructive">{saveError}</p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Current Filters:</p>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <div>Search: {searchQuery || 'None'}</div>
+                <div>Practice Types: {selectedPracticeTypes.size} selected</div>
+                <div>States: {selectedStates.size} selected</div>
+                <div>Cities: {selectedCities.size} selected</div>
+                <div>Dispositions: {selectedDispositions.size} selected</div>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsSaveDialogOpen(false)}
+                className="flex-1 h-11"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={saveCurrentSearch}
+                className="flex-1 h-11"
+              >
+                Save Search
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

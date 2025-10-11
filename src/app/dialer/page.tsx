@@ -2380,22 +2380,18 @@ export default function DialerPage() {
           </div>
         </div>
 
-        {/* Contact Details Drawer - Bottom on Mobile, Right on Desktop */}
-        <Drawer 
-          open={!!selectedCaller} 
-          onOpenChange={(open) => {
-            if (!open) {
-              setSelectedCaller(null)
-            }
-          }}
-          direction={isMobile ? "bottom" : "right"}
-        >
-          <DrawerContent className={cn(
-            "bg-background overflow-hidden",
-            isMobile 
-              ? "!h-[85vh] !max-h-none !rounded-t-[20px] border-t border-border flex flex-col"
-              : "!w-1/2 !max-w-none border-l border-border overflow-y-auto hidden"
-          )}>
+        {/* Contact Details Drawer - Mobile Only */}
+        {isMobile && (
+          <Drawer 
+            open={!!selectedCaller} 
+            onOpenChange={(open) => {
+              if (!open) {
+                setSelectedCaller(null)
+              }
+            }}
+            direction="bottom"
+          >
+          <DrawerContent className="!h-[85vh] !max-h-none !rounded-t-[20px] border-t border-border flex flex-col bg-background overflow-hidden">
             <DrawerTitle className="sr-only">Contact Details</DrawerTitle>
               {selectedCaller && (
                 <div className="flex flex-col h-full">
@@ -2692,6 +2688,7 @@ export default function DialerPage() {
               )}
           </DrawerContent>
         </Drawer>
+        )}
       </div>
 
       {/* Edit Lead Dialog */}
