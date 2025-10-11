@@ -84,11 +84,16 @@ export default function MobileDialerPage() {
   const [isCityFilterOpen, setIsCityFilterOpen] = useState(false)
   const [isDispositionFilterOpen, setIsDispositionFilterOpen] = useState(false)
 
-  // Fetch leads on mount
+  // Fetch filter options on mount, then fetch leads
   useEffect(() => {
-    fetchLeads()
+    fetchFilterOptions()
     loadSavedSearches()
   }, [])
+
+  // Refetch leads when filters change
+  useEffect(() => {
+    fetchLeads()
+  }, [searchQuery, selectedPracticeTypes, selectedStates, selectedCities, selectedDispositions])
 
 
   // Fetch notes when a lead is selected
@@ -114,15 +119,85 @@ export default function MobileDialerPage() {
     }
   }, [callOutcome])
 
+  // Fetch filter options separately (practice types, states, cities) - only needs to run once
+  const fetchFilterOptions = async () => {
+    try {
+      // Fetch unique filter values in batches
+      let allData: any[] = []
+      const batchSize = 1000
+      let start = 0
+
+      while (true) {
+        const { data, error } = await supabase
+          .from('cold_leads')
+          .select('practice_type, state, city')
+          .range(start, start + batchSize - 1)
+
+        if (error) throw error
+
+        if (!data || data.length === 0) break
+        
+        allData = [...allData, ...data]
+        
+        if (data.length < batchSize) break
+        start += batchSize
+      }
+
+      // Extract unique values from the combined dataset
+      const practiceTypes = Array.from(new Set(allData.map(row => row.practice_type).filter(Boolean))).sort()
+      const states = Array.from(new Set(allData.map(row => row.state).filter(Boolean))).sort()
+      const cities = Array.from(new Set(allData.map(row => row.city).filter(Boolean))).sort()
+
+      setAllPracticeTypes(practiceTypes)
+      setAllStates(states)
+      setAllCities(cities)
+
+      // Initialize all filters as selected
+      setSelectedPracticeTypes(new Set(practiceTypes))
+      setSelectedStates(new Set(states))
+      setSelectedCities(new Set(cities))
+      setSelectedDispositions(new Set(['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status']))
+
+    } catch (error) {
+      console.error('Error fetching filter options:', error)
+      toast.error('Failed to load filter options')
+    }
+  }
+
   const fetchLeads = async () => {
     try {
       setLoading(true)
 
-      // Fetch cold leads with call counts
-      const { data: leadsData, error: leadsError } = await supabase
+      // Build query with server-side filters
+      let query = supabase
         .from('cold_leads')
         .select('id, company_name, owner_name, phone_number, city, state, practice_type, website, address')
-        .order('company_name', { ascending: true })
+
+      // Apply search filter (server-side)
+      if (searchQuery) {
+        const searchTerm = searchQuery.toLowerCase()
+        query = query.or(`company_name.ilike.%${searchTerm}%,owner_name.ilike.%${searchTerm}%,phone_number.ilike.%${searchTerm}%,city.ilike.%${searchTerm}%,state.ilike.%${searchTerm}%`)
+      }
+
+      // Apply practice type filter (server-side)
+      if (selectedPracticeTypes.size > 0 && selectedPracticeTypes.size < allPracticeTypes.length) {
+        query = query.in('practice_type', Array.from(selectedPracticeTypes))
+      }
+
+      // Apply state filter (server-side)
+      if (selectedStates.size > 0 && selectedStates.size < allStates.length) {
+        query = query.in('state', Array.from(selectedStates))
+      }
+
+      // Apply city filter (server-side)
+      if (selectedCities.size > 0 && selectedCities.size < allCities.length) {
+        query = query.in('city', Array.from(selectedCities))
+      }
+
+      // Fetch with limit to prevent overwhelming the client
+      query = query.order('company_name', { ascending: true }).limit(2000)
+
+      const { data: leadsData, error: leadsError } = await query
 
       if (leadsError) throw leadsError
 
@@ -161,30 +236,23 @@ export default function MobileDialerPage() {
         }
       }).filter(Boolean) as ColdLead[]
 
+      // Apply disposition filter (client-side, based on call logs)
+      const filteredByDisposition = processedLeads.filter(lead => {
+        if (selectedDispositions.size === 0 || selectedDispositions.size === 6) {
+          return true // All dispositions selected
+        }
+        return selectedDispositions.has(lead.lastDisposition || 'Never Called')
+      })
+
       // Sort: never called first, then by last call date (oldest first)
-      processedLeads.sort((a, b) => {
+      filteredByDisposition.sort((a, b) => {
         if (!a.lastCallDate && !b.lastCallDate) return 0
         if (!a.lastCallDate) return -1
         if (!b.lastCallDate) return 1
         return new Date(a.lastCallDate).getTime() - new Date(b.lastCallDate).getTime()
       })
 
-      setLeads(processedLeads)
-
-      // Extract unique values for filters
-      const practiceTypes = Array.from(new Set(processedLeads.map(l => l.practiceType).filter(Boolean))).sort()
-      const states = Array.from(new Set(processedLeads.map(l => l.state).filter(Boolean))).sort()
-      const cities = Array.from(new Set(processedLeads.map(l => l.city).filter(Boolean))).sort()
-
-      setAllPracticeTypes(practiceTypes)
-      setAllStates(states)
-      setAllCities(cities)
-
-      // Initialize all filters as selected
-      setSelectedPracticeTypes(new Set(practiceTypes))
-      setSelectedStates(new Set(states))
-      setSelectedCities(new Set(cities))
-      setSelectedDispositions(new Set(['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status']))
+      setLeads(filteredByDisposition)
 
     } catch (error) {
       console.error('Error fetching leads:', error)
@@ -218,11 +286,6 @@ export default function MobileDialerPage() {
 
       if (error) throw error
 
-      // Show appropriate success message
-      const successMessage = outcome === "Clear Status" 
-        ? "Call status cleared"
-        : "Call status updated"
-      toast.success(successMessage)
 
       // Refresh lead list to show updated status
       fetchLeads()
@@ -485,45 +548,8 @@ export default function MobileDialerPage() {
     return phone
   }
 
-  // Filter leads
-  const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        const matchesSearch = 
-          lead.company.toLowerCase().includes(query) ||
-          lead.contactName.toLowerCase().includes(query) ||
-          lead.phoneNumber.includes(query) ||
-          lead.city.toLowerCase().includes(query) ||
-          lead.state.toLowerCase().includes(query)
-        
-        if (!matchesSearch) return false
-      }
-
-      // Practice type filter
-      if (selectedPracticeTypes.size > 0 && !selectedPracticeTypes.has(lead.practiceType)) {
-        return false
-      }
-
-      // State filter
-      if (selectedStates.size > 0 && !selectedStates.has(lead.state)) {
-        return false
-      }
-
-      // City filter
-      if (selectedCities.size > 0 && !selectedCities.has(lead.city)) {
-        return false
-      }
-
-      // Disposition filter
-      if (selectedDispositions.size > 0 && !selectedDispositions.has(lead.lastDisposition || 'Never Called')) {
-        return false
-      }
-
-      return true
-    })
-  }, [leads, searchQuery, selectedPracticeTypes, selectedStates, selectedCities, selectedDispositions])
+  // Leads are now filtered server-side, so we use them directly
+  const filteredLeads = leads
 
   const handlePracticeTypeChange = (practiceType: string, checked: boolean) => {
     setSelectedPracticeTypes(prev => {
@@ -612,9 +638,6 @@ export default function MobileDialerPage() {
             </SheetTrigger>
           </Sheet>
         </div>
-        <div className="mt-2 text-xs text-muted-foreground">
-          {filteredLeads.length} of {leads.length} leads
-        </div>
       </div>
 
       {/* Lead List - Scrollable */}
@@ -634,47 +657,60 @@ export default function MobileDialerPage() {
           <div className="p-2 space-y-2">
             {filteredLeads.map((lead) => (
               <Card key={lead.id} className="border-0 shadow-none bg-card hover:bg-accent/50 transition-colors">
-                <CardContent className="p-3">
+                <CardContent className="py-4 px-4">
                   <div className="flex items-start justify-between gap-3">
                     <div 
                       className="flex-1 min-w-0 cursor-pointer"
                       onClick={() => setSelectedLead(lead)}
                     >
-                      <h3 className="font-semibold text-base text-card-foreground truncate">
+                      {/* Business Name - Top */}
+                      <h3 className="font-semibold text-base text-card-foreground truncate pt-1">
                         {lead.company}
                       </h3>
-                      <p className="text-sm text-muted-foreground truncate">
+                      
+                      {/* Contact Name - Below business name */}
+                      <p className="text-sm truncate mt-1" style={{ color: '#999999' }}>
                         {lead.contactName}
                       </p>
-                      <p className="text-sm font-mono text-foreground mt-1">
-                        {formatPhoneNumber(lead.phoneNumber)}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">
+                      
+                      {/* Location and Specialty - Bottom */}
+                      <div className="flex items-center mt-3">
+                        <span className="text-sm" style={{ color: '#888888' }}>
+                          {lead.city && lead.state && (
+                            <>
+                              <MapPin className="inline h-3 w-3 mr-1" />
+                              {lead.city}, {lead.state}
+                              {lead.practiceType && ' • '}
+                            </>
+                          )}
                           {lead.practiceType}
-                        </Badge>
-                        {lead.city && lead.state && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span>{lead.city}, {lead.state}</span>
-                          </div>
-                        )}
-                        {lead.callCount !== undefined && lead.callCount > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            {lead.callCount} call{lead.callCount !== 1 ? 's' : ''}
-                          </Badge>
-                        )}
+                        </span>
                       </div>
                     </div>
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCallClick(lead)
-                      }}
-                      className="h-12 w-12 rounded-full bg-green-600 hover:bg-green-700 text-white flex-shrink-0"
-                    >
-                      <Phone className="h-5 w-5" />
-                    </Button>
+                    
+                    {/* Right side: Call Now button and status */}
+                    <div className="flex flex-col items-end gap-2">
+                      {/* Call Now Button */}
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCallClick(lead)
+                        }}
+                        className="h-10 px-4 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium flex-shrink-0"
+                      >
+                        Call Now
+                      </Button>
+                      
+                      {/* Call Status - Below Call Now button */}
+                      {lead.lastDisposition && (
+                        <Badge 
+                          variant="outline"
+                          className="text-xs px-2 py-1 bg-gray-100 text-gray-600 border-gray-300"
+                        >
+                          {lead.lastDisposition}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1011,6 +1047,9 @@ export default function MobileDialerPage() {
             setSelectedLead(null)
           }
         }}
+        dismissible={true}
+        closeThreshold={0.15}
+        shouldScaleBackground={false}
       >
         <DrawerContent className={cn(
           "bg-background overflow-hidden",
@@ -1090,7 +1129,7 @@ export default function MobileDialerPage() {
                       )}
                       
                       {selectedLead.website && (
-                        <div className="pt-4 space-y-3">
+                        <div className="pt-4">
                           <Button
                             variant="outline"
                             size="default"
@@ -1105,17 +1144,16 @@ export default function MobileDialerPage() {
                             <Globe className="h-5 w-5 mr-2" />
                             Visit Website
                           </Button>
-                          
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Call Outcome Dropdown */}
-                  <div className="pt-4">
+                  <div className="pt-2">
                     <Select value={callOutcome} onValueChange={setCallOutcome}>
                       <SelectTrigger className="w-full h-12">
-                        <SelectValue placeholder="Select Call Outcome" />
+                        <SelectValue placeholder="Select call outcome" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Booked">Booked</SelectItem>
