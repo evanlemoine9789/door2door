@@ -73,7 +73,7 @@ export function MobileNav() {
     <>
       {/* Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border pb-safe">
-        <div className="flex items-center justify-around h-16">
+        <div className="flex items-center justify-around h-20 px-2">
           {PRIMARY_NAV_ITEMS.map((item) => {
             const Icon = item.icon
             const isActive = pathname.startsWith(item.href)
@@ -83,13 +83,13 @@ export function MobileNav() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors",
+                  "flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors py-2 px-1 min-h-[44px]",
                   isActive 
                     ? "text-primary" 
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-6 w-6" />
               </Link>
             )
           })}
@@ -98,9 +98,9 @@ export function MobileNav() {
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <button
-                className="flex flex-col items-center justify-center gap-1 flex-1 h-full text-muted-foreground hover:text-foreground transition-colors"
+                className="flex flex-col items-center justify-center gap-1 flex-1 h-full text-muted-foreground hover:text-foreground transition-colors py-2 px-1 min-h-[44px]"
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-6 w-6" />
               </button>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-auto">
@@ -136,7 +136,7 @@ export function MobileNav() {
       </nav>
       
       {/* Spacer to prevent content from being hidden behind bottom nav */}
-      <div className="h-16" />
+      <div className="h-20" />
     </>
   )
 }
