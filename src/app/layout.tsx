@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   viewport: {
     width: "device-width",
     initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
+    maximumScale: 1, // Prevent auto-zoom on inputs
+    userScalable: false, // Disable pinch-to-zoom to prevent input zoom
     viewportFit: "cover", // For iPhone notch/Dynamic Island support
   },
   appleWebApp: {
