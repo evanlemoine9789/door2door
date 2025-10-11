@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +17,8 @@ import { supabase } from "@/lib/supabase"
 import { JustCallDialer } from "@justcall/justcall-dialer-sdk"
 import { toast } from 'sonner'
 import { sendLeadToWebhook, testWebhookAPI } from "@/lib/webhook-api"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { cn } from "@/lib/utils"
 
 interface Caller {
   id: string
@@ -186,6 +189,9 @@ export default function DialerPage() {
   const [allPracticeTypes, setAllPracticeTypes] = useState<string[]>([])
   const [allStates, setAllStates] = useState<string[]>([])
   const [allCities, setAllCities] = useState<string[]>([])
+
+  // Mobile detection
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     fetchCallers(dialerCurrentPage, dialerPageSize, filters)
@@ -2058,38 +2064,38 @@ export default function DialerPage() {
             </Card>
           </div>
 
-          {/* Right Card - Contact Details */}
-          <div className="col-span-4">
-            <Card className="h-full flex flex-col">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-card-foreground">Contact Details</CardTitle>
-                  {selectedCaller && (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDialog(selectedCaller)}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (window.confirm(`Are you sure you want to delete ${selectedCaller.name}? This action cannot be undone.`)) {
-                            deleteLead(selectedCaller.id)
-                          }
-                        }}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
+          {/* Right Card - Contact Details (Desktop Only) */}
+          <div className="col-span-4 hidden md:block">
+              <Card className="h-full flex flex-col">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-card-foreground">Contact Details</CardTitle>
+                    {selectedCaller && (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditDialog(selectedCaller)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete ${selectedCaller.name}? This action cannot be undone.`)) {
+                              deleteLead(selectedCaller.id)
+                            }
+                          }}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardHeader>
               
               {selectedCaller ? (
                 <>
@@ -2373,6 +2379,319 @@ export default function DialerPage() {
             </Card>
           </div>
         </div>
+
+        {/* Contact Details Drawer - Bottom on Mobile, Right on Desktop */}
+        <Drawer 
+          open={!!selectedCaller} 
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedCaller(null)
+            }
+          }}
+          direction={isMobile ? "bottom" : "right"}
+        >
+          <DrawerContent className={cn(
+            "bg-background overflow-hidden",
+            isMobile 
+              ? "!h-[85vh] !max-h-none !rounded-t-[20px] border-t border-border flex flex-col"
+              : "!w-1/2 !max-w-none border-l border-border overflow-y-auto hidden"
+          )}>
+            <DrawerTitle className="sr-only">Contact Details</DrawerTitle>
+              {selectedCaller && (
+                <div className="flex flex-col h-full">
+                  {/* Header with Actions */}
+                  <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+                    <h2 className="text-lg font-semibold text-card-foreground">Contact Details</h2>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          openEditDialog(selectedCaller)
+                        }}
+                        className="h-9 w-9 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete ${selectedCaller.name}? This action cannot be undone.`)) {
+                            deleteLead(selectedCaller.id)
+                          }
+                        }}
+                        className="h-9 w-9 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Tab Navigation */}
+                  <div className="flex items-center border-b border-border shrink-0">
+                    <button
+                      onClick={() => setContactTab('details')}
+                      className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                        contactTab === 'details'
+                          ? 'text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Details
+                      {contactTab === 'details' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setContactTab('notes')}
+                      className={`px-4 py-3 text-sm font-medium transition-colors relative flex items-center gap-1.5 ${
+                        contactTab === 'notes'
+                          ? 'text-primary'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      Notes
+                      {notes.length > 0 && (
+                        <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-muted text-foreground text-xs font-semibold">
+                          {notes.length}
+                        </span>
+                      )}
+                      {contactTab === 'notes' && (
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Scrollable Content */}
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {contactTab === 'details' ? (
+                      /* Details Tab */
+                      <div className="space-y-4">
+                        <div>
+                          <h3 className="font-semibold text-card-foreground mb-2 text-lg">
+                            {selectedCaller.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mb-4">{selectedCaller.practice}</p>
+                          
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              <a 
+                                href={`tel:${selectedCaller.phone}`}
+                                className="text-primary font-medium hover:underline"
+                              >
+                                {selectedCaller.phone}
+                              </a>
+                            </div>
+                            
+                            {(selectedCaller.city || selectedCaller.state) && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">
+                                  {[selectedCaller.city, selectedCaller.state].filter(Boolean).join(', ')}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {selectedCaller.practiceType && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Building2 className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">{selectedCaller.practiceType}</span>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center gap-2 text-sm">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-muted-foreground">Last Call: {selectedCaller.lastCall}</span>
+                            </div>
+                            
+                            <div className="pt-4 space-y-2">
+                              <Button
+                                variant="outline"
+                                size="default"
+                                className="w-full h-11"
+                                onClick={() => {
+                                  if (selectedCaller.website) {
+                                    const website = selectedCaller.website.startsWith('http') 
+                                      ? selectedCaller.website 
+                                      : `https://${selectedCaller.website}`
+                                    window.open(website, '_blank')
+                                  } else {
+                                    toast.error('No website available for this lead')
+                                  }
+                                }}
+                                disabled={!selectedCaller.website}
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Visit Site
+                              </Button>
+                              
+                              <div>
+                                <label className="text-xs text-muted-foreground block mb-1">Call Outcome</label>
+                                <Select 
+                                  value={selectedCaller.callStatus || ""}
+                                  onValueChange={(value) => updateCallStatus(selectedCaller.id, value)}
+                                >
+                                  <SelectTrigger className={`w-full h-11 ${getCallStatusColor(selectedCaller.callStatus)}`}>
+                                    <SelectValue placeholder="Set outcome" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="No Connect">No Connect</SelectItem>
+                                    <SelectItem value="Not Booked">Not Booked</SelectItem>
+                                    <SelectItem value="Booked">Booked</SelectItem>
+                                    <SelectItem value="Do Not Call">Do Not Call</SelectItem>
+                                    <SelectItem value="Email">Email</SelectItem>
+                                    <SelectItem value="CLEAR_STATUS">Clear Status</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {/* Date and Time Inputs */}
+                              <div className="pt-2 space-y-2">
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Meeting Date</label>
+                                  <Input
+                                    type="date"
+                                    className="w-full h-11 bg-card border-border text-foreground"
+                                    value={meetingDate}
+                                    onChange={(event) => setMeetingDate(event.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Meeting Time</label>
+                                  <Input
+                                    type="time"
+                                    className="w-full h-11 bg-card border-border text-foreground"
+                                    value={meetingTime}
+                                    onChange={(event) => setMeetingTime(event.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-xs text-muted-foreground block mb-1">Booked With</label>
+                                  <Input
+                                    type="text"
+                                    className="w-full h-11 bg-card border-border text-foreground"
+                                    placeholder="Enter who the meeting was booked with"
+                                    value={bookedWith}
+                                    onChange={(event) => setBookedWith(event.target.value)}
+                                  />
+                                </div>
+                                <div className={`relative w-full ${isButtonEnabled ? 'p-[2px]' : ''}`}>
+                                  {isButtonEnabled && (
+                                    <div 
+                                      className="absolute inset-0 rounded-md"
+                                      style={{
+                                        background: 'linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000)',
+                                        backgroundSize: '400% 400%',
+                                        animation: 'rainbowBorder 2s linear infinite',
+                                      }}
+                                    />
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="default"
+                                    className={`w-full h-11 relative transition-all duration-300 ${
+                                      isButtonEnabled 
+                                        ? 'bg-gray-800 text-white border-0 hover:bg-gray-700' 
+                                        : 'bg-gray-600 text-gray-400 border-2 border-gray-500 opacity-50'
+                                    }`}
+                                    disabled={!isButtonEnabled || isScheduling}
+                                    onClick={() => scheduleEngagedLead(selectedCaller, meetingDate, meetingTime)}
+                                  >
+                                    {isScheduling ? 'Scheduling...' : isLeadInEngagedLeads ? 'Already in Engaged Leads' : 'Add to Engaged Leads'}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Notes Tab */
+                      <div className="flex flex-col h-full">
+                        {/* Notes List */}
+                        <div className="flex-1 space-y-4 mb-4">
+                          {notes.length > 0 ? (
+                            notes.map((note) => {
+                              const initials = note.user_profiles?.full_name
+                                ?.split(' ')
+                                .map((n: string) => n[0])
+                                .join('')
+                                .toUpperCase() || 'U'
+                              
+                              const timeAgo = new Date(note.created_at).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })
+                              
+                              return (
+                                <div key={note.id} className="flex items-start space-x-2">
+                                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <span className="text-xs font-semibold text-primary">{initials}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline space-x-2 mb-1">
+                                      <span className="text-xs font-semibold text-foreground">
+                                        {note.user_profiles?.full_name || 'Unknown User'}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">{timeAgo}</span>
+                                    </div>
+                                    <div className="bg-muted rounded-lg p-2 border border-border">
+                                      <p className="text-xs text-foreground">{note.note_text}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className="text-center py-8 text-muted-foreground text-xs">
+                              No notes yet. Add the first note below!
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Message Input - Fixed at bottom */}
+                        <div className="border-t border-border pt-3">
+                          <div className="flex items-end space-x-2">
+                            <input
+                              type="text"
+                              placeholder="Add a note..."
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && noteText.trim() && !isSavingNote) {
+                                  handleAddNote()
+                                }
+                              }}
+                              disabled={isSavingNote}
+                              className="flex-1 h-11 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+                            />
+                            <button 
+                              onClick={handleAddNote}
+                              disabled={!noteText.trim() || isSavingNote}
+                              className="flex-shrink-0 h-11 w-11 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                              {isSavingNote ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+          </DrawerContent>
+        </Drawer>
       </div>
 
       {/* Edit Lead Dialog */}

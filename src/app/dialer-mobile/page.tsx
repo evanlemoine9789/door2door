@@ -11,10 +11,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer'
 import { Textarea } from '@/components/ui/textarea'
-import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight } from 'lucide-react'
+import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 interface ColdLead {
   id: string
@@ -26,6 +28,8 @@ interface ColdLead {
   practiceType: string
   lastCallDate?: string
   callCount?: number
+  website?: string
+  address?: string
 }
 
 interface PendingCall {
@@ -45,6 +49,10 @@ export default function MobileDialerPage() {
   const [currentCallData, setCurrentCallData] = useState<PendingCall | null>(null)
   const [selectedDisposition, setSelectedDisposition] = useState<string>('')
   const [notes, setNotes] = useState('')
+  const [selectedLead, setSelectedLead] = useState<ColdLead | null>(null)
+  const [leadNotes, setLeadNotes] = useState<any[]>([])
+  const [newNoteText, setNewNoteText] = useState('')
+  const [isSavingNote, setIsSavingNote] = useState(false)
   const isMobile = useIsMobile()
 
   // Filter states
@@ -84,6 +92,15 @@ export default function MobileDialerPage() {
     return () => document.removeEventListener('visibilitychange', checkPendingCall)
   }, [])
 
+  // Fetch notes when a lead is selected
+  useEffect(() => {
+    if (selectedLead) {
+      fetchLeadNotes(selectedLead.id)
+    } else {
+      setLeadNotes([])
+    }
+  }, [selectedLead])
+
   const fetchLeads = async () => {
     try {
       setLoading(true)
@@ -91,7 +108,7 @@ export default function MobileDialerPage() {
       // Fetch cold leads with call counts
       const { data: leadsData, error: leadsError } = await supabase
         .from('cold_leads')
-        .select('id, company_name, owner_name, phone_number, city, state, practice_type')
+        .select('id, company_name, owner_name, phone_number, city, state, practice_type, website, address')
         .order('company_name', { ascending: true })
 
       if (leadsError) throw leadsError
@@ -123,6 +140,8 @@ export default function MobileDialerPage() {
           city: lead.city || '',
           state: lead.state || '',
           practiceType: lead.practice_type || '',
+          website: lead.website || '',
+          address: lead.address || '',
           lastCallDate: lastCall?.call_timestamp,
           callCount: leadCallLogs.length
         }
@@ -224,6 +243,110 @@ export default function MobileDialerPage() {
       setCurrentCallData(null)
       setSelectedDisposition('')
       setNotes('')
+    }
+  }
+
+  // Fetch notes for a specific lead
+  const fetchLeadNotes = async (leadId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_notes')
+        .select('id, note_text, created_at, user_id')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      
+      // Get user profiles for the notes
+      const userIds = [...new Set(data?.map(note => note.user_id) || [])]
+      const { data: userProfiles } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .in('id', userIds)
+
+      // Combine notes with user profiles
+      const notesWithProfiles = data?.map(note => ({
+        ...note,
+        user_profiles: userProfiles?.find(profile => profile.id === note.user_id)
+      })) || []
+
+      setLeadNotes(notesWithProfiles)
+    } catch (error) {
+      console.error('Error fetching lead notes:', error)
+      setLeadNotes([])
+    }
+  }
+
+  // Save a new note
+  const saveNote = async () => {
+    if (!selectedLead || !newNoteText.trim()) return
+
+    try {
+      setIsSavingNote(true)
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('User not authenticated')
+
+      // Create the note object for immediate display
+      const newNote = {
+        id: `temp-${Date.now()}`, // Temporary ID
+        note_text: newNoteText.trim(),
+        created_at: new Date().toISOString(),
+        user_id: user.id,
+        user_profiles: {
+          full_name: user.user_metadata?.full_name || user.email || 'You'
+        }
+      }
+
+      // Add note to local state immediately for instant display (at the end)
+      setLeadNotes(prev => [...prev, newNote])
+      
+      // Clear the input immediately
+      const noteText = newNoteText.trim()
+      setNewNoteText('')
+
+      // Save to database
+      const { data: savedNote, error } = await supabase
+        .from('lead_notes')
+        .insert({
+          lead_id: selectedLead.id,
+          note_text: noteText,
+          user_id: user.id
+        })
+        .select('id, note_text, created_at, user_id')
+        .single()
+
+      if (error) throw error
+
+      // Get user profile for the saved note
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .eq('id', savedNote.user_id)
+        .single()
+
+      // Create the complete note object
+      const completeSavedNote = {
+        ...savedNote,
+        user_profiles: userProfile
+      }
+
+      // Replace the temporary note with the real one from database
+      setLeadNotes(prev => prev.map(note => 
+        note.id === newNote.id ? completeSavedNote : note
+      ))
+    } catch (error) {
+      console.error('Error saving note:', error)
+      toast.error('Failed to save note')
+      
+      // Remove the temporary note if save failed
+      setLeadNotes(prev => prev.filter(note => !note.id.startsWith('temp-')))
+      
+      // Restore the input text
+      setNewNoteText(newNoteText.trim())
+    } finally {
+      setIsSavingNote(false)
     }
   }
 
@@ -357,7 +480,10 @@ export default function MobileDialerPage() {
               <Card key={lead.id} className="border-0 shadow-none bg-card hover:bg-accent/50 transition-colors">
                 <CardContent className="p-3">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => setSelectedLead(lead)}
+                    >
                       <h3 className="font-semibold text-base text-card-foreground truncate">
                         {lead.company}
                       </h3>
@@ -385,7 +511,10 @@ export default function MobileDialerPage() {
                       </div>
                     </div>
                     <Button
-                      onClick={() => handleCallClick(lead)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCallClick(lead)
+                      }}
                       className="h-12 w-12 rounded-full bg-green-600 hover:bg-green-700 text-white flex-shrink-0"
                     >
                       <Phone className="h-5 w-5" />
@@ -704,6 +833,206 @@ export default function MobileDialerPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Lead Details Drawer */}
+      <Drawer 
+        open={!!selectedLead} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedLead(null)
+          }
+        }}
+      >
+        <DrawerContent className={cn(
+          "bg-background overflow-hidden",
+          "!h-screen !max-h-none !rounded-none border-0 flex flex-col"
+        )}>
+          <DrawerTitle className="sr-only">Practice Details</DrawerTitle>
+          {selectedLead && (
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+                <h2 className="text-lg font-semibold text-card-foreground">Practice Details</h2>
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCallClick(selectedLead)
+                    setSelectedLead(null) // Close drawer after initiating call
+                  }}
+                  className="h-10 px-4 bg-green-600 hover:bg-green-700 text-white rounded-md"
+                >
+                  <Phone className="h-4 w-4 mr-2" />
+                  Call Now
+                </Button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-card-foreground mb-2 text-xl">
+                      {selectedLead.company}
+                    </h3>
+                    <p className="text-base text-muted-foreground mb-4">{selectedLead.contactName}</p>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-base">
+                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        <a 
+                          href={`tel:${selectedLead.phoneNumber}`}
+                          className="text-primary font-medium hover:underline"
+                        >
+                          {formatPhoneNumber(selectedLead.phoneNumber)}
+                        </a>
+                      </div>
+                      
+                      {(selectedLead.city || selectedLead.state) && (
+                        <div className="flex items-center gap-2 text-base">
+                          <MapPin className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {[selectedLead.city, selectedLead.state].filter(Boolean).join(', ')}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {selectedLead.address && (
+                        <div className="flex items-start gap-2 text-base">
+                          <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
+                          <span className="text-muted-foreground">
+                            {selectedLead.address}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {selectedLead.practiceType && (
+                        <div className="flex items-center gap-2 text-base">
+                          <Building2 className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-muted-foreground">{selectedLead.practiceType}</span>
+                        </div>
+                      )}
+                      
+                      {selectedLead.callCount !== undefined && selectedLead.callCount > 0 && (
+                        <div className="flex items-center gap-2 text-base">
+                          <Phone className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {selectedLead.callCount} previous call{selectedLead.callCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {selectedLead.website && (
+                        <div className="pt-4">
+                          <Button
+                            variant="outline"
+                            size="default"
+                            className="w-full h-12"
+                            onClick={() => {
+                              const website = selectedLead.website!.startsWith('http') 
+                                ? selectedLead.website 
+                                : `https://${selectedLead.website}`
+                              window.open(website, '_blank')
+                            }}
+                          >
+                            <Globe className="h-5 w-5 mr-2" />
+                            Visit Website
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Notes Section */}
+                  <div className="pt-6 border-t border-border">
+                    <div className="flex items-center gap-2 mb-3">
+                      <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                      <h4 className="text-base font-semibold text-card-foreground">Notes</h4>
+                    </div>
+                    
+                    {/* Notes List with Scroll Area */}
+                    <div className="h-48 border border-border rounded-lg bg-muted/30">
+                      <ScrollArea className="h-full">
+                        <div className="p-3 space-y-3">
+                          {leadNotes.length > 0 ? (
+                            leadNotes.map((note) => {
+                              const initials = note.user_profiles?.full_name
+                                ?.split(' ')
+                                .map((n: string) => n[0])
+                                .join('')
+                                .toUpperCase() || 'U'
+                              
+                              const timeAgo = new Date(note.created_at).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                              })
+                              
+                              return (
+                                <div key={note.id} className="flex items-start space-x-2">
+                                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center">
+                                    <span className="text-xs font-semibold text-primary">{initials}</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline space-x-2 mb-1">
+                                      <span className="text-xs font-semibold text-foreground">
+                                        {note.user_profiles?.full_name || 'Unknown User'}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">{timeAgo}</span>
+                                    </div>
+                                    <div className="bg-background rounded-md p-2 border border-border">
+                                      <p className="text-sm text-foreground">{note.note_text}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          ) : (
+                            <div className="text-center py-8 text-muted-foreground text-sm">
+                              No notes yet. Add the first note below!
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+
+                    {/* Add Note Input */}
+                    <div className="mt-3 flex items-end space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Add a note..."
+                        value={newNoteText}
+                        onChange={(e) => setNewNoteText(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && newNoteText.trim() && !isSavingNote) {
+                            saveNote()
+                          }
+                        }}
+                        disabled={isSavingNote}
+                        className="flex-1 h-10 px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+                      />
+                      <button 
+                        onClick={saveNote}
+                        disabled={!newNoteText.trim() || isSavingNote}
+                        className="flex-shrink-0 h-10 w-10 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                      >
+                        {isSavingNote ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground"></div>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
