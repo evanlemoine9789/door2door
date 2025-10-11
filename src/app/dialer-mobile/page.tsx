@@ -539,6 +539,37 @@ export default function MobileDialerPage() {
     toast.success('Search deleted')
   }
 
+  // Helper function to count active filters
+  const getActiveFilterCount = () => {
+    let count = 0
+    if (searchQuery) count++
+    if (selectedPracticeTypes.size > 0 && selectedPracticeTypes.size < allPracticeTypes.length) count++
+    if (selectedStates.size > 0 && selectedStates.size < allStates.length) count++
+    if (selectedCities.size > 0 && selectedCities.size < allCities.length) count++
+    if (selectedDispositions.size > 0 && selectedDispositions.size < 6) count++
+    return count
+  }
+
+  // Helper function to check if any filters are active
+  const hasActiveFilters = () => {
+    return getActiveFilterCount() > 0
+  }
+
+  // Apply filters and close drawer
+  const applyFilters = () => {
+    setIsFilterOpen(false)
+    // Filters are already applied via useEffect, just close the drawer
+  }
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSearchQuery('')
+    setSelectedPracticeTypes(new Set(allPracticeTypes))
+    setSelectedStates(new Set(allStates))
+    setSelectedCities(new Set(allCities))
+    setSelectedDispositions(new Set(['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status']))
+  }
+
   const formatPhoneNumber = (phone: string) => {
     if (!phone || phone === 'N/A') return phone
     const cleaned = phone.replace(/\D/g, '')
@@ -721,13 +752,22 @@ export default function MobileDialerPage() {
 
       {/* Filters Sheet */}
       <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-        <SheetContent side="bottom" className="h-[80vh] flex flex-col">
+        <SheetContent side="bottom" className="h-[80vh] flex flex-col [&>button]:hidden">
             <div className="flex-shrink-0 px-6 py-4 border-b border-border">
               <div className="flex items-center justify-between">
                 <SheetTitle className="text-lg font-semibold">Filters</SheetTitle>
                 <div className="flex items-center gap-2">
-                  {/* Saved Searches Dropdown */}
-                  <div className="relative">
+                  {/* Save and Saved Buttons */}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setIsSaveDialogOpen(true)}
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -741,15 +781,14 @@ export default function MobileDialerPage() {
                     </Button>
                   </div>
                   
-                  {/* Save Search Button */}
+                  {/* Close Button */}
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setIsSaveDialogOpen(true)}
+                    className="h-8 w-8 p-0"
+                    onClick={() => setIsFilterOpen(false)}
                   >
-                    <Save className="h-3 w-3 mr-1" />
-                    Save
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -782,7 +821,7 @@ export default function MobileDialerPage() {
               )}
             </div>
             
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 pb-24 space-y-4">
               
               {/* Practice Type Filter */}
               <Collapsible open={isPracticeFilterOpen} onOpenChange={setIsPracticeFilterOpen}>
@@ -807,38 +846,51 @@ export default function MobileDialerPage() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-2 pb-2">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {selectedPracticeTypes.size} of {allPracticeTypes.length} selected
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedPracticeTypes(new Set())}
-                        className="text-xs h-7 px-2"
-                      >
-                        Deselect All
-                      </Button>
+                  <div className="space-y-4">
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 bg-background z-10 py-2 border-b border-border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-muted-foreground font-medium">
+                          {selectedPracticeTypes.size} of {allPracticeTypes.length} selected
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedPracticeTypes(new Set())}
+                          className="h-10 px-4 text-sm font-medium"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
                     </div>
                     
                     <ScrollArea className="h-[200px]">
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         {allPracticeTypes.map((practiceType) => (
-                          <div key={practiceType} className="flex items-center space-x-2">
+                          <div 
+                            key={practiceType} 
+                            className={cn(
+                              "flex items-center px-3 py-3 rounded-lg transition-colors cursor-pointer",
+                              "hover:bg-muted/50 active:bg-muted",
+                              selectedPracticeTypes.has(practiceType) && "bg-primary/10"
+                            )}
+                            onClick={() => handlePracticeTypeChange(practiceType, !selectedPracticeTypes.has(practiceType))}
+                          >
                             <Checkbox
                               id={`practice-${practiceType}`}
                               checked={selectedPracticeTypes.has(practiceType)}
-                              onCheckedChange={(checked) => 
-                                handlePracticeTypeChange(practiceType, checked as boolean)
-                              }
+                              className="h-5 w-5 mr-4 pointer-events-none"
                             />
-                            <label 
-                              htmlFor={`practice-${practiceType}`}
-                              className="text-sm text-card-foreground cursor-pointer"
+                            <span 
+                              className={cn(
+                                "text-base font-normal cursor-pointer flex-1 leading-6",
+                                selectedPracticeTypes.has(practiceType) 
+                                  ? "text-foreground font-medium" 
+                                  : "text-card-foreground"
+                              )}
                             >
                               {practiceType}
-                            </label>
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -870,38 +922,51 @@ export default function MobileDialerPage() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-2 pb-2">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {selectedStates.size} of {allStates.length} selected
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedStates(new Set())}
-                        className="text-xs h-7 px-2"
-                      >
-                        Deselect All
-                      </Button>
+                  <div className="space-y-4">
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 bg-background z-10 py-2 border-b border-border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-muted-foreground font-medium">
+                          {selectedStates.size} of {allStates.length} selected
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedStates(new Set())}
+                          className="h-10 px-4 text-sm font-medium"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
                     </div>
                     
                     <ScrollArea className="h-[200px]">
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         {allStates.map((state) => (
-                          <div key={state} className="flex items-center space-x-2">
+                          <div 
+                            key={state} 
+                            className={cn(
+                              "flex items-center px-3 py-3 rounded-lg transition-colors cursor-pointer",
+                              "hover:bg-muted/50 active:bg-muted",
+                              selectedStates.has(state) && "bg-primary/10"
+                            )}
+                            onClick={() => handleStateChange(state, !selectedStates.has(state))}
+                          >
                             <Checkbox
                               id={`state-${state}`}
                               checked={selectedStates.has(state)}
-                              onCheckedChange={(checked) => 
-                                handleStateChange(state, checked as boolean)
-                              }
+                              className="h-5 w-5 mr-4 pointer-events-none"
                             />
-                            <label 
-                              htmlFor={`state-${state}`}
-                              className="text-sm text-card-foreground cursor-pointer"
+                            <span 
+                              className={cn(
+                                "text-base font-normal cursor-pointer flex-1 leading-6",
+                                selectedStates.has(state) 
+                                  ? "text-foreground font-medium" 
+                                  : "text-card-foreground"
+                              )}
                             >
                               {state}
-                            </label>
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -933,38 +998,51 @@ export default function MobileDialerPage() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-2 pb-2">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {selectedCities.size} of {allCities.length} selected
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedCities(new Set())}
-                        className="text-xs h-7 px-2"
-                      >
-                        Deselect All
-                      </Button>
+                  <div className="space-y-4">
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 bg-background z-10 py-2 border-b border-border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-muted-foreground font-medium">
+                          {selectedCities.size} of {allCities.length} selected
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedCities(new Set())}
+                          className="h-10 px-4 text-sm font-medium"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
                     </div>
                     
                     <ScrollArea className="h-[200px]">
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         {allCities.map((city) => (
-                          <div key={city} className="flex items-center space-x-2">
+                          <div 
+                            key={city} 
+                            className={cn(
+                              "flex items-center px-3 py-3 rounded-lg transition-colors cursor-pointer",
+                              "hover:bg-muted/50 active:bg-muted",
+                              selectedCities.has(city) && "bg-primary/10"
+                            )}
+                            onClick={() => handleCityChange(city, !selectedCities.has(city))}
+                          >
                             <Checkbox
                               id={`city-${city}`}
                               checked={selectedCities.has(city)}
-                              onCheckedChange={(checked) => 
-                                handleCityChange(city, checked as boolean)
-                              }
+                              className="h-5 w-5 mr-4 pointer-events-none"
                             />
-                            <label 
-                              htmlFor={`city-${city}`}
-                              className="text-sm text-card-foreground cursor-pointer"
+                            <span 
+                              className={cn(
+                                "text-base font-normal cursor-pointer flex-1 leading-6",
+                                selectedCities.has(city) 
+                                  ? "text-foreground font-medium" 
+                                  : "text-card-foreground"
+                              )}
                             >
                               {city}
-                            </label>
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -996,37 +1074,50 @@ export default function MobileDialerPage() {
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-2 pb-2">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {selectedDispositions.size} of 6 selected
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDispositions(new Set())}
-                        className="text-xs h-7 px-2"
-                      >
-                        Deselect All
-                      </Button>
+                  <div className="space-y-4">
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 bg-background z-10 py-2 border-b border-border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-base text-muted-foreground font-medium">
+                          {selectedDispositions.size} of 6 selected
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedDispositions(new Set())}
+                          className="h-10 px-4 text-sm font-medium"
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {['Never Called', 'Booked', 'Not Booked', 'No Connect', 'Email', 'Clear Status'].map((disposition) => (
-                        <div key={disposition} className="flex items-center space-x-2">
+                        <div 
+                          key={disposition} 
+                          className={cn(
+                            "flex items-center px-3 py-3 rounded-lg transition-colors cursor-pointer",
+                            "hover:bg-muted/50 active:bg-muted",
+                            selectedDispositions.has(disposition) && "bg-primary/10"
+                          )}
+                          onClick={() => handleDispositionChange(disposition, !selectedDispositions.has(disposition))}
+                        >
                           <Checkbox
                             id={`disposition-${disposition}`}
                             checked={selectedDispositions.has(disposition)}
-                            onCheckedChange={(checked) => 
-                              handleDispositionChange(disposition, checked as boolean)
-                            }
+                            className="h-5 w-5 mr-4 pointer-events-none"
                           />
-                          <label 
-                            htmlFor={`disposition-${disposition}`}
-                            className="text-sm text-card-foreground cursor-pointer"
+                          <span 
+                            className={cn(
+                              "text-base font-normal cursor-pointer flex-1 leading-6",
+                              selectedDispositions.has(disposition) 
+                                ? "text-foreground font-medium" 
+                                : "text-card-foreground"
+                            )}
                           >
                             {disposition}
-                          </label>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1034,6 +1125,36 @@ export default function MobileDialerPage() {
                 </CollapsibleContent>
               </Collapsible>
 
+            </div>
+
+            {/* Sticky Footer with Action Buttons */}
+            <div className="flex-shrink-0 border-t border-border bg-background p-4">
+              <div className="flex gap-3">
+                {hasActiveFilters() ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-12"
+                      onClick={clearAllFilters}
+                    >
+                      Clear All
+                    </Button>
+                    <Button
+                      className="flex-1 h-12"
+                      onClick={applyFilters}
+                    >
+                      Apply ({getActiveFilterCount()} Filter{getActiveFilterCount() !== 1 ? 's' : ''})
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    className="w-full h-12"
+                    onClick={applyFilters}
+                  >
+                    Apply Filters
+                  </Button>
+                )}
+              </div>
             </div>
           </SheetContent>
         </Sheet>
@@ -1058,6 +1179,14 @@ export default function MobileDialerPage() {
           <DrawerTitle className="sr-only">Practice Details</DrawerTitle>
           {selectedLead && (
             <div className="flex flex-col h-full">
+              {/* Tap to Close Area */}
+              <div 
+                className="flex justify-center py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                onClick={() => setSelectedLead(null)}
+              >
+                <span className="text-sm text-muted-foreground">Tap to Close</span>
+              </div>
+              
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
                 <h2 className="text-lg font-semibold text-card-foreground">Practice Details</h2>
