@@ -203,6 +203,24 @@
   -o-animation: rainbowBorder 3s ease-in-out infinite;
 }
 
+/* Mobile Touch Optimizations */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Ensure calendar day buttons are properly touchable */
+.rdp-day {
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Mobile calendar optimizations */
+.rdp-day:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

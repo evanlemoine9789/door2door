@@ -109,15 +109,18 @@ export function MobileDateTimePicker({
           {/* Date Selection */}
           <div className="mb-6">
             <h3 className="text-lg font-semibold mb-3">Select Date</h3>
-            <div
-              className="w-full px-2"
-              style={{ ["--rdp-day" as any]: "min(12vw, 2.75rem)" }}
-            >
+            <div className="w-full px-2">
               <Calendar
                 mode="single"
                 selected={tempDate}
                 onSelect={(selectedDate) => selectedDate && setTempDate(selectedDate)}
                 className="w-full rounded-md border"
+                classNames={{
+                  day: "h-11 w-11 min-h-[44px] min-w-[44px] p-0 font-normal aria-selected:opacity-100 touch-manipulation",
+                  cell: "h-11 w-11 min-h-[44px] min-w-[44px] text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                  head_cell: "text-muted-foreground rounded-md w-11 min-w-[44px] font-normal text-[0.8rem]",
+                  row: "flex w-full mt-2"
+                }}
               />
             </div>
           </div>
