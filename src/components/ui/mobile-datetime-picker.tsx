@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer"
 import { Calendar } from "@/components/ui/calendar"
@@ -21,12 +21,37 @@ export function MobileDateTimePicker({
   placeholder = "Select date and time..."
 }: MobileDateTimePickerProps) {
   const [tempDate, setTempDate] = useState<Date>(date || new Date())
-  const [timeValue, setTimeValue] = useState<string>("")
+  const [timeValue, setTimeValue] = useState<string>(() => {
+    // Initialize time value from existing date
+    if (date) {
+      return format(date, "HH:mm")
+    }
+    return ""
+  })
 
   const [isOpen, setIsOpen] = useState(false)
 
+  // Update internal state when external date prop changes
+  useEffect(() => {
+    if (date) {
+      setTempDate(date)
+      setTimeValue(format(date, "HH:mm"))
+    } else {
+      setTempDate(new Date())
+      setTimeValue("")
+    }
+  }, [date])
+
   const handleSave = () => {
-    setDate(tempDate)
+    let finalDate = new Date(tempDate)
+    
+    // If time is provided, set the time on the date
+    if (timeValue) {
+      const [hours, minutes] = timeValue.split(':').map(Number)
+      finalDate.setHours(hours, minutes, 0, 0)
+    }
+    
+    setDate(finalDate)
     setIsOpen(false)
   }
 
@@ -34,6 +59,7 @@ export function MobileDateTimePicker({
     // Reset to original values
     const originalDate = date || new Date()
     setTempDate(originalDate)
+    setTimeValue(date ? format(date, "HH:mm") : "")
     setIsOpen(false)
   }
 
@@ -41,7 +67,14 @@ export function MobileDateTimePicker({
   const formatDisplayValue = () => {
     if (!date) return placeholder
     
-    return format(date, "MMM dd, yyyy")
+    // Check if the date has a meaningful time (not midnight)
+    const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0
+    
+    if (hasTime) {
+      return format(date, "MMM dd, yyyy 'at' h:mm a")
+    } else {
+      return format(date, "MMM dd, yyyy")
+    }
   }
 
   return (
