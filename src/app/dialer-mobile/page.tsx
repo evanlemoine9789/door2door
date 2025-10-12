@@ -1223,15 +1223,6 @@ export default function MobileDialerPage() {
                         </a>
                       </div>
                       
-                      {(selectedLead.city || selectedLead.state) && (
-                        <div className="flex items-center gap-2 text-base">
-                          <MapPin className="h-5 w-5 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {[selectedLead.city, selectedLead.state].filter(Boolean).join(', ')}
-                          </span>
-                        </div>
-                      )}
-                      
                       {selectedLead.address && (
                         <div className="flex items-start gap-2 text-base">
                           <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />

@@ -143,28 +143,27 @@ export function LeadsTable({
   // Mobile Card View Component
   const MobileLeadCard = ({ lead }: { lead: Lead }) => (
     <Card 
-      className={`cursor-pointer transition-all border-0 shadow-none bg-transparent hover:bg-accent/50 ${
+      className={`cursor-pointer transition-all border-0 shadow-none bg-card hover:bg-accent/50 ${
         selectedLeadId === lead.id ? 'bg-primary/10' : ''
       }`}
       onClick={() => onLeadSelect(lead)}
     >
-      <CardContent className="p-2">
+      <CardContent className="py-4 px-3">
         {/* Header with company and status */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-sm text-card-foreground truncate leading-tight">
+            <h3 className="font-semibold text-base text-card-foreground truncate leading-normal">
               {lead.company}
             </h3>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <span>{lead.contactName}</span>
-              {(lead.city || lead.state) && (
-                <>
-                  <span>•</span>
-                  <MapPin className="h-3 w-3" />
-                  <span className="truncate">{getLocationString(lead.city, lead.state)}</span>
-                </>
-              )}
-            </div>
+            <p className="text-sm text-muted-foreground leading-normal mt-1 truncate">
+              {lead.contactName}
+            </p>
+            {(lead.city || lead.state) && (
+              <div className="flex items-center gap-1 text-sm text-muted-foreground leading-normal mt-1">
+                <MapPin className="h-3.5 w-3.5" />
+                <span className="truncate">{getLocationString(lead.city, lead.state)}</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Badge className={getStatusBadgeClass(lead.meetingStatus)}>
@@ -250,7 +249,7 @@ export function LeadsTable({
       {/* Leads Display - Cards on Mobile, Table on Desktop */}
       {isMobile ? (
         // Mobile Card View
-        <div className="space-y-0">
+        <div className="space-y-2">
           {filteredLeads.map((lead) => (
             <MobileLeadCard key={lead.id} lead={lead} />
           ))}
