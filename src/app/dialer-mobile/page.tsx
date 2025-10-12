@@ -17,6 +17,7 @@ import { MobileDateTimePicker } from '@/components/ui/mobile-datetime-picker'
 import { Phone, Search, Filter, MapPin, ChevronDown, ChevronRight, Building2, Globe, MessageSquare, Save, Bookmark, Trash2, X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { usePreventZoom } from '@/hooks/use-prevent-zoom'
+import { useAuth } from '@/components/providers/auth-provider'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -52,14 +53,21 @@ interface SavedSearch {
 const SAVED_SEARCHES_STORAGE_KEY = "dialer_mobile_saved_searches"
 
 export default function MobileDialerPage() {
+  const { user } = useAuth()
   const [leads, setLeads] = useState<ColdLead[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [selectedLead, setSelectedLead] = useState<ColdLead | null>(null)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [leadNotes, setLeadNotes] = useState<any[]>([])
   const [newNoteText, setNewNoteText] = useState('')
   const [isSavingNote, setIsSavingNote] = useState(false)
+  
+  // Call state management
+  const [isCalling, setIsCalling] = useState(false)
+  const [callingLeadId, setCallingLeadId] = useState<string | null>(null)
+  const [appState, setAppState] = useState<string>('visible')
   const [callOutcome, setCallOutcome] = useState<string>("")
   const [meetingDate, setMeetingDate] = useState<Date | undefined>()
   const [bookedWith, setBookedWith] = useState<string>("")
@@ -84,16 +92,54 @@ export default function MobileDialerPage() {
   const [isCityFilterOpen, setIsCityFilterOpen] = useState(false)
   const [isDispositionFilterOpen, setIsDispositionFilterOpen] = useState(false)
 
-  // Fetch filter options on mount, then fetch leads
+  // Fetch user's organization_id
   useEffect(() => {
-    fetchFilterOptions()
-    loadSavedSearches()
-  }, [])
+    async function fetchUserOrganization() {
+      if (!user) {
+        setOrganizationId(null)
+        return
+      }
 
-  // Refetch leads when filters change
+      try {
+        console.log('🔍 Fetching organization for user:', user.id)
+        
+        const { data, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError) {
+          console.error('❌ Error fetching user profile:', profileError)
+          return
+        }
+
+        if (data?.organization_id) {
+          console.log('✅ Organization ID found:', data.organization_id)
+          setOrganizationId(data.organization_id)
+        }
+      } catch (err) {
+        console.error('💥 Exception in fetchUserOrganization:', err)
+      }
+    }
+
+    fetchUserOrganization()
+  }, [user])
+
+  // Fetch filter options when organization is available
   useEffect(() => {
-    fetchLeads()
-  }, [searchQuery, selectedPracticeTypes, selectedStates, selectedCities, selectedDispositions])
+    if (organizationId) {
+      fetchFilterOptions()
+    }
+    loadSavedSearches()
+  }, [organizationId])
+
+  // Refetch leads when filters change or organization is available
+  useEffect(() => {
+    if (organizationId) {
+      fetchLeads()
+    }
+  }, [searchQuery, selectedPracticeTypes, selectedStates, selectedCities, selectedDispositions, organizationId])
 
 
   // Fetch notes when a lead is selected
@@ -104,6 +150,40 @@ export default function MobileDialerPage() {
       setLeadNotes([])
     }
   }, [selectedLead])
+
+  // App state management for call detection
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return
+
+    // Initialize app state with current visibility
+    setAppState(document.visibilityState)
+
+    const handleVisibilityChange = () => {
+      const currentVisibility = document.visibilityState
+      console.log('📱 App visibility changed from', appState, 'to', currentVisibility)
+      
+      if (appState === 'hidden' && currentVisibility === 'visible') {
+        // App has become visible again - user returned from phone call
+        console.log('📞 User returned from phone call')
+        if (isCalling && callingLeadId) {
+          console.log('📞 Call completed for lead:', callingLeadId)
+          handleCallReturn()
+        }
+      } else if (currentVisibility === 'hidden') {
+        // App is going to background - user is making a call
+        console.log('📞 App going to background - call initiated')
+      }
+      
+      setAppState(currentVisibility)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [appState, isCalling, callingLeadId])
 
   // Auto-update call status for any outcome
   useEffect(() => {
@@ -121,6 +201,11 @@ export default function MobileDialerPage() {
 
   // Fetch filter options separately (practice types, states, cities) - only needs to run once
   const fetchFilterOptions = async () => {
+    // Don't fetch if we don't have an organization ID yet
+    if (!organizationId) {
+      return
+    }
+
     try {
       // Fetch unique filter values in batches
       let allData: any[] = []
@@ -131,6 +216,7 @@ export default function MobileDialerPage() {
         const { data, error } = await supabase
           .from('cold_leads')
           .select('practice_type, state, city')
+          .eq('organization_id', organizationId)  // Filter by organization
           .range(start, start + batchSize - 1)
 
         if (error) throw error
@@ -165,6 +251,12 @@ export default function MobileDialerPage() {
   }
 
   const fetchLeads = async () => {
+    // Don't fetch if we don't have an organization ID yet
+    if (!organizationId) {
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
 
@@ -172,6 +264,7 @@ export default function MobileDialerPage() {
       let query = supabase
         .from('cold_leads')
         .select('id, company_name, owner_name, phone_number, city, state, practice_type, website, address')
+        .eq('organization_id', organizationId)  // Filter by organization
 
       // Apply search filter (server-side)
       if (searchQuery) {
@@ -263,8 +356,99 @@ export default function MobileDialerPage() {
   }
 
   const handleCallClick = (lead: ColdLead) => {
+    // Set calling state before initiating call
+    setIsCalling(true)
+    setCallingLeadId(lead.id)
+    console.log('📞 Initiating call for lead:', lead.id, lead.company)
+    
     // Trigger native phone call
     window.location.href = `tel:${lead.phoneNumber}`
+  }
+
+  // Helper function to get status dot color based on disposition
+  const getStatusDotColor = (disposition: string | null) => {
+    switch (disposition) {
+      case 'Booked':
+        return 'bg-green-500'
+      case 'Not Booked':
+        return 'bg-red-500'
+      case 'No Connect':
+        return 'bg-yellow-500'
+      case 'Email':
+        return 'bg-blue-500'
+      case 'Never Called':
+      case 'Call Made':
+      case null:
+      default:
+        return 'bg-gray-400'
+    }
+  }
+
+  // Helper function to format last call date
+  const formatLastCallDate = (lastCallDate: string | null) => {
+    if (!lastCallDate) return 'Never Called'
+    
+    const callDate = new Date(lastCallDate)
+    const now = new Date()
+    const diffInMs = now.getTime() - callDate.getTime()
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60))
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
+    
+    if (diffInMinutes < 1) return 'Just called'
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+    if (diffInHours < 24) return `${diffInHours}h ago`
+    if (diffInDays === 1) return 'Yesterday'
+    if (diffInDays < 7) return `${diffInDays}d ago`
+    if (diffInDays < 30) return `${Math.floor(diffInDays / 7)}w ago`
+    
+    // For older calls, show the actual date
+    return callDate.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: callDate.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    })
+  }
+
+  const handleCallReturn = async () => {
+    console.log('📞 Handling call return for lead:', callingLeadId)
+    
+    // Reset calling state
+    setIsCalling(false)
+    
+    // Find the lead that was called
+    const calledLead = leads.find(lead => lead.id === callingLeadId)
+    if (calledLead) {
+      // Auto-log the call to mobile_call_logs
+      try {
+        const { error } = await supabase
+          .from('mobile_call_logs')
+          .insert({
+            cold_lead_id: calledLead.id,
+            phone_number: calledLead.phoneNumber,
+            call_timestamp: new Date().toISOString(),
+            disposition: 'Call Made', // Default disposition for auto-logged calls
+            notes: 'Automatically logged call'
+          })
+
+        if (error) {
+          console.error('❌ Error logging call:', error)
+        } else {
+          console.log('✅ Call logged successfully for:', calledLead.company)
+          // Refresh leads to update the last call date display
+          fetchLeads()
+        }
+      } catch (err) {
+        console.error('💥 Exception logging call:', err)
+      }
+      
+      // Auto-open details drawer for the called lead
+      setSelectedLead(calledLead)
+      console.log('📞 Auto-opened details drawer for:', calledLead.company)
+    }
+    
+    // Reset calling lead ID
+    setCallingLeadId(null)
   }
 
   const updateCallStatus = async (outcome: string) => {
@@ -279,13 +463,95 @@ export default function MobileDialerPage() {
             call_date: new Date().toISOString() 
           } // Set both call_status and call_date for other outcomes
 
-      const { error } = await supabase
+      // Update cold_leads table
+      const { error: leadsError } = await supabase
         .from('cold_leads')
         .update(updateData)
         .eq('id', selectedLead.id)
 
-      if (error) throw error
+      if (leadsError) throw leadsError
 
+      // Also update mobile_call_logs to ensure status dots reflect the change
+      // Check if there's already a call log for today
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+
+      const { data: existingLogs } = await supabase
+        .from('mobile_call_logs')
+        .select('id')
+        .eq('cold_lead_id', selectedLead.id)
+        .gte('call_timestamp', today.toISOString())
+        .lt('call_timestamp', tomorrow.toISOString())
+        .order('call_timestamp', { ascending: false })
+        .limit(1)
+
+      if (outcome === "Clear Status") {
+        // For Clear Status, update existing log to null disposition or create one with null
+        if (existingLogs && existingLogs.length > 0) {
+          // Update existing log to null disposition
+          const { error: logUpdateError } = await supabase
+            .from('mobile_call_logs')
+            .update({
+              disposition: null,
+              notes: 'Status cleared',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingLogs[0].id)
+
+          if (logUpdateError) {
+            console.error('Error clearing call log disposition:', logUpdateError)
+          }
+        } else {
+          // Create new log entry with null disposition
+          const { error: logInsertError } = await supabase
+            .from('mobile_call_logs')
+            .insert({
+              cold_lead_id: selectedLead.id,
+              phone_number: selectedLead.phoneNumber,
+              call_timestamp: new Date().toISOString(),
+              disposition: null,
+              notes: 'Status cleared'
+            })
+
+          if (logInsertError) {
+            console.error('Error creating cleared call log:', logInsertError)
+          }
+        }
+      } else {
+        // For other outcomes, set the disposition
+        if (existingLogs && existingLogs.length > 0) {
+          // Update existing log
+          const { error: logUpdateError } = await supabase
+            .from('mobile_call_logs')
+            .update({
+              disposition: outcome,
+              notes: `Disposition updated to ${outcome}`,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingLogs[0].id)
+
+          if (logUpdateError) {
+            console.error('Error updating call log:', logUpdateError)
+          }
+        } else {
+          // Create new log entry
+          const { error: logInsertError } = await supabase
+            .from('mobile_call_logs')
+            .insert({
+              cold_lead_id: selectedLead.id,
+              phone_number: selectedLead.phoneNumber,
+              call_timestamp: new Date().toISOString(),
+              disposition: outcome,
+              notes: `Disposition set to ${outcome}`
+            })
+
+          if (logInsertError) {
+            console.error('Error creating call log:', logInsertError)
+          }
+        }
+      }
 
       // Refresh lead list to show updated status
       fetchLeads()
@@ -687,7 +953,13 @@ export default function MobileDialerPage() {
         ) : (
           <div className="p-2 space-y-2">
             {filteredLeads.map((lead) => (
-              <Card key={lead.id} className="border-0 shadow-none bg-card hover:bg-accent/50 transition-colors">
+              <Card key={lead.id} className="border-0 shadow-none bg-card hover:bg-accent/50 transition-colors relative">
+                {/* Status Dot - Upper right corner */}
+                <div className={cn(
+                  "absolute top-2 right-2 w-3 h-3 rounded-full",
+                  getStatusDotColor(lead.lastDisposition || null)
+                )} />
+                
                 <CardContent className="py-4 px-4">
                   <div className="flex items-start justify-between gap-3">
                     <div 
@@ -727,20 +999,28 @@ export default function MobileDialerPage() {
                           e.stopPropagation()
                           handleCallClick(lead)
                         }}
-                        className="h-10 px-4 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium flex-shrink-0"
+                        disabled={isCalling && callingLeadId === lead.id}
+                        className={cn(
+                          "h-10 px-4 rounded-md text-white text-sm font-medium flex-shrink-0 transition-all duration-200",
+                          isCalling && callingLeadId === lead.id
+                            ? "bg-blue-600 hover:bg-blue-700 cursor-not-allowed"
+                            : "bg-green-600 hover:bg-green-700"
+                        )}
                       >
-                        Call Now
+                        {isCalling && callingLeadId === lead.id ? (
+                          <div className="flex items-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            <span>Calling...</span>
+                          </div>
+                        ) : (
+                          "Call Now"
+                        )}
                       </Button>
                       
-                      {/* Call Status - Below Call Now button */}
-                      {lead.lastDisposition && (
-                        <Badge 
-                          variant="outline"
-                          className="text-xs px-2 py-1 bg-gray-100 text-gray-600 border-gray-300"
-                        >
-                          {lead.lastDisposition}
-                        </Badge>
-                      )}
+                      {/* Last Call Date - Below Call Now button */}
+                      <div className="text-xs text-muted-foreground text-center">
+                        {formatLastCallDate(lead.lastCallDate || null)}
+                      </div>
                     </div>
                   </div>
                 </CardContent>

@@ -9,5 +9,7 @@ export interface GeocodeData {
     phone_number: string
     practice_type: string
     website?: string
+    city?: string
+    state?: string
   } | null
 }

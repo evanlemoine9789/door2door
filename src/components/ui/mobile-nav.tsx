@@ -3,11 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Snowflake, Flame, Search, Menu, Phone, Map, Users } from "lucide-react"
+import { LayoutDashboard, Snowflake, Flame, Search, Menu, Phone, Map, Users, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/components/providers/auth-provider"
 
 type NavItem = {
   title: string
@@ -22,14 +23,14 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
-    title: "Cold Leads",
-    href: "/crm/leads/cold-leads",
-    icon: Snowflake,
-  },
-  {
     title: "Engaged Leads",
     href: "/crm/leads/engaged-leads",
     icon: Flame,
+  },
+  {
+    title: "Map",
+    href: "/map",
+    icon: Map,
   },
   {
     title: "Dialer",
@@ -40,14 +41,14 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   {
+    title: "Cold Leads",
+    href: "/crm/leads/cold-leads",
+    icon: Snowflake,
+  },
+  {
     title: "Generate Leads",
     href: "/generate-leads",
     icon: Search,
-  },
-  {
-    title: "Map",
-    href: "/map",
-    icon: Map,
   },
   {
     title: "Team Settings",
@@ -60,6 +61,7 @@ export function MobileNav() {
   const pathname = usePathname()
   const isMobile = useIsMobile()
   const [open, setOpen] = React.useState(false)
+  const { signOut } = useAuth()
 
   // Don't show on auth pages
   const authRoutes = ['/login', '/signup']
@@ -128,6 +130,18 @@ export function MobileNav() {
                       </Link>
                     )
                   })}
+                  
+                  {/* Logout Button */}
+                  <button
+                    onClick={() => {
+                      setOpen(false)
+                      signOut()
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-lg transition-colors text-red-500 hover:text-red-400 hover:bg-red-500/10 w-full text-left"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span className="font-medium">Log Out</span>
+                  </button>
                 </div>
               </div>
             </SheetContent>

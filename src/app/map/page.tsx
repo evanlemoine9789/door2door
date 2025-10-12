@@ -15,15 +15,26 @@ import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { X, ChevronDown, ChevronRight, Send, AlertCircle, CheckCircle, Search, MapPin, Navigation, Filter } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useAuth } from '@/components/providers/auth-provider'
 
 export default function MapPage() {
+  const { user } = useAuth()
   const [geocodeData, setGeocodeData] = useState<GeocodeData[]>([])
   const [selectedPracticeTypes, setSelectedPracticeTypes] = useState<Set<string>>(new Set())
   const [allPracticeTypes, setAllPracticeTypes] = useState<string[]>([])
   const [loadingPracticeTypes, setLoadingPracticeTypes] = useState(false)
   const [loadingGeocodeData, setLoadingGeocodeData] = useState(false)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [selectedLeads, setSelectedLeads] = useState<GeocodeData[]>([])
   const [isPracticeFilterOpen, setIsPracticeFilterOpen] = useState(false)
+  
+  // State and City filters
+  const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set())
+  const [allStates, setAllStates] = useState<string[]>([])
+  const [isStateFilterOpen, setIsStateFilterOpen] = useState(false)
+  const [selectedCities, setSelectedCities] = useState<Set<string>>(new Set())
+  const [allCities, setAllCities] = useState<string[]>([])
+  const [isCityFilterOpen, setIsCityFilterOpen] = useState(false)
   const [emailAddress, setEmailAddress] = useState('')
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizationMessage, setOptimizationMessage] = useState('')
@@ -47,6 +58,40 @@ export default function MapPage() {
   const [locationError, setLocationError] = useState<string | null>(null)
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
 
+  // Fetch user's organization_id
+  useEffect(() => {
+    async function fetchUserOrganization() {
+      if (!user) {
+        setOrganizationId(null)
+        return
+      }
+
+      try {
+        console.log('🔍 Fetching organization for user:', user.id)
+        
+        const { data, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('organization_id')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError) {
+          console.error('❌ Error fetching user profile:', profileError)
+          return
+        }
+
+        if (data?.organization_id) {
+          console.log('✅ Organization ID found:', data.organization_id)
+          setOrganizationId(data.organization_id)
+        }
+      } catch (err) {
+        console.error('💥 Exception in fetchUserOrganization:', err)
+      }
+    }
+
+    fetchUserOrganization()
+  }, [user])
+
   // Log selected leads changes for debugging
   useEffect(() => {
     console.log('🗺️ Selected leads array changed:', selectedLeads.length, 'leads selected')
@@ -59,6 +104,12 @@ export default function MapPage() {
 
   useEffect(() => {
     const testGeocodeData = async () => {
+      // Don't fetch if we don't have an organization ID yet
+      if (!organizationId) {
+        setLoadingGeocodeData(false)
+        return
+      }
+
       try {
         setLoadingGeocodeData(true)
         console.log('🗺️ Testing geocode data fetch...')
@@ -67,6 +118,7 @@ export default function MapPage() {
         const { data: coldLeadsData, error: coldLeadsError } = await supabase
           .from('cold_leads')
           .select('company_name, owner_name, phone_number, practice_type')
+          .eq('organization_id', organizationId)  // Filter by organization
           .limit(5)
 
         if (coldLeadsError) {
@@ -107,14 +159,18 @@ export default function MapPage() {
             longitude,
             cold_lead_id,
             address,
-            cold_leads (
+            cold_leads!inner (
               company_name,
               owner_name,
               phone_number,
               practice_type,
-              website
+              website,
+              city,
+              state,
+              organization_id
             )
           `)
+            .eq('cold_leads.organization_id', organizationId)  // Filter by organization
             .range(start, start + batchSize - 1)
 
           if (error) {
@@ -150,6 +206,13 @@ export default function MapPage() {
         console.log('🗺️ Map test data:', data)
         console.log(`🗺️ Found ${data?.length || 0} successful geocoded leads`)
         console.log(`🗺️ Total markers loaded: ${data?.length || 0}`)
+        
+        // Debug: Check if we have any data and what the structure looks like
+        if (data && data.length > 0) {
+          console.log('🗺️ First record structure:', data[0])
+          const firstColdLead = Array.isArray(data[0].cold_leads) ? data[0].cold_leads[0] : data[0].cold_leads
+          console.log('🗺️ First cold lead data:', firstColdLead)
+        }
         
         // Store the data in state for the map markers
         if (data) {
@@ -188,11 +251,17 @@ export default function MapPage() {
     }
 
     testGeocodeData()
-  }, [])
+  }, [organizationId])
 
   // Fetch all practice types with pagination
   useEffect(() => {
     const fetchAllPracticeTypes = async () => {
+      // Don't fetch if we don't have an organization ID yet
+      if (!organizationId) {
+        setLoadingPracticeTypes(false)
+        return
+      }
+
       try {
         setLoadingPracticeTypes(true)
         console.log('🗺️ Fetching all practice types with pagination...')
@@ -206,8 +275,9 @@ export default function MapPage() {
           const { data, error } = await supabase
             .from('lead_geocodes')
             .select(`
-              cold_leads!inner (practice_type)
+              cold_leads!inner (practice_type, organization_id)
             `)
+            .eq('cold_leads.organization_id', organizationId)  // Filter by organization
             .range(start, start + batchSize - 1)
 
           if (error) {
@@ -256,19 +326,170 @@ export default function MapPage() {
     }
 
     fetchAllPracticeTypes()
-  }, [])
+  }, [organizationId])
+
+  // Fetch all states with pagination
+  useEffect(() => {
+    const fetchAllStates = async () => {
+      // Don't fetch if we don't have an organization ID yet
+      if (!organizationId) {
+        return
+      }
+
+      try {
+        console.log('🗺️ Fetching all states with pagination...')
+        
+        const batchSize = 1000
+        let start = 0
+        let allRecords: any[] = []
+        let hasMore = true
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('lead_geocodes')
+            .select(`
+              cold_leads!inner (state, organization_id)
+            `)
+            .eq('cold_leads.organization_id', organizationId)  // Filter by organization
+            .range(start, start + batchSize - 1)
+
+          if (error) {
+            console.error('❌ Error fetching states:', error)
+            break
+          }
+
+          if (data && data.length > 0) {
+            allRecords = allRecords.concat(data)
+            start += batchSize
+            
+            if (data.length < batchSize) {
+              hasMore = false
+            }
+          } else {
+            hasMore = false
+          }
+        }
+
+        // Extract unique states
+        const states = Array.from(
+          new Set(
+            allRecords
+              .map(record => {
+                const coldLeads = Array.isArray(record.cold_leads) ? record.cold_leads[0] : record.cold_leads
+                return coldLeads?.state
+              })
+              .filter(Boolean)
+          )
+        ).sort()
+
+        setAllStates(states)
+        setSelectedStates(new Set(states)) // Initialize to all selected
+        
+        console.log('🗺️ Found states:', states)
+        console.log('🗺️ States count:', states.length)
+
+      } catch (error) {
+        console.error('❌ Unexpected error fetching states:', error)
+      }
+    }
+
+    fetchAllStates()
+  }, [organizationId])
+
+  // Fetch all cities with pagination
+  useEffect(() => {
+    const fetchAllCities = async () => {
+      // Don't fetch if we don't have an organization ID yet
+      if (!organizationId) {
+        return
+      }
+
+      try {
+        console.log('🗺️ Fetching all cities with pagination...')
+        
+        const batchSize = 1000
+        let start = 0
+        let allRecords: any[] = []
+        let hasMore = true
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from('lead_geocodes')
+            .select(`
+              cold_leads!inner (city, organization_id)
+            `)
+            .eq('cold_leads.organization_id', organizationId)  // Filter by organization
+            .range(start, start + batchSize - 1)
+
+          if (error) {
+            console.error('❌ Error fetching cities:', error)
+            break
+          }
+
+          if (data && data.length > 0) {
+            allRecords = allRecords.concat(data)
+            start += batchSize
+            
+            if (data.length < batchSize) {
+              hasMore = false
+            }
+          } else {
+            hasMore = false
+          }
+        }
+
+        // Extract unique cities
+        const cities = Array.from(
+          new Set(
+            allRecords
+              .map(record => {
+                const coldLeads = Array.isArray(record.cold_leads) ? record.cold_leads[0] : record.cold_leads
+                return coldLeads?.city
+              })
+              .filter(Boolean)
+          )
+        ).sort()
+
+        setAllCities(cities)
+        setSelectedCities(new Set(cities)) // Initialize to all selected
+        
+        console.log('🗺️ Found cities:', cities)
+        console.log('🗺️ Cities count:', cities.length)
+
+      } catch (error) {
+        console.error('❌ Unexpected error fetching cities:', error)
+      }
+    }
+
+    fetchAllCities()
+  }, [organizationId])
 
   // Use all practice types fetched with pagination
   const uniquePracticeTypes = useMemo(() => {
     return allPracticeTypes
   }, [allPracticeTypes])
 
-  // Filter geocode data based on selected practice types
+  // Filter geocode data based on selected practice types, states, and cities
   const filteredGeocodeData = useMemo(() => {
-    return geocodeData.filter(record => 
-      selectedPracticeTypes.has(record.cold_leads?.practice_type || '')
-    )
-  }, [geocodeData, selectedPracticeTypes])
+    console.log('🗺️ Filtering data:', {
+      totalRecords: geocodeData.length,
+      selectedPracticeTypes: selectedPracticeTypes.size,
+      selectedStates: selectedStates.size,
+      selectedCities: selectedCities.size
+    })
+    
+    const filtered = geocodeData.filter(record => {
+      // If filter sets are empty, show all records (initial state)
+      const practiceTypeMatch = selectedPracticeTypes.size === 0 || selectedPracticeTypes.has(record.cold_leads?.practice_type || '')
+      const stateMatch = selectedStates.size === 0 || selectedStates.has(record.cold_leads?.state || '')
+      const cityMatch = selectedCities.size === 0 || selectedCities.has(record.cold_leads?.city || '')
+      
+      return practiceTypeMatch && stateMatch && cityMatch
+    })
+    
+    console.log('🗺️ Filtered result:', filtered.length, 'records')
+    return filtered
+  }, [geocodeData, selectedPracticeTypes, selectedStates, selectedCities])
 
   // Handle practice type filter changes
   const handlePracticeTypeChange = (practiceType: string, checked: boolean) => {
@@ -278,6 +499,32 @@ export default function MapPage() {
         newSet.add(practiceType)
       } else {
         newSet.delete(practiceType)
+      }
+      return newSet
+    })
+  }
+
+  // Handle state filter changes
+  const handleStateChange = (state: string, checked: boolean) => {
+    setSelectedStates(prev => {
+      const newSet = new Set(prev)
+      if (checked) {
+        newSet.add(state)
+      } else {
+        newSet.delete(state)
+      }
+      return newSet
+    })
+  }
+
+  // Handle city filter changes
+  const handleCityChange = (city: string, checked: boolean) => {
+    setSelectedCities(prev => {
+      const newSet = new Set(prev)
+      if (checked) {
+        newSet.add(city)
+      } else {
+        newSet.delete(city)
       }
       return newSet
     })
@@ -542,6 +789,7 @@ export default function MapPage() {
                   <Navigation className="h-4 w-4" />
                 )}
               </Button>
+              
             </div>
           </form>
           
@@ -577,18 +825,9 @@ export default function MapPage() {
             </div>
           ) : (
             <>
-              {/* Filters Button - Fixed at bottom right */}
-              <div className="absolute bottom-4 right-4 z-[1000]">
-                <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-                  <SheetTrigger asChild>
-                    <Button
-                      className="h-12 w-12 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-                      title="Filters & Route"
-                    >
-                      <Filter className="h-5 w-5" />
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="bottom" className="h-[80vh] flex flex-col">
+              {/* Filters Sheet Content */}
+              <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                <SheetContent side="bottom" className="h-[80vh] flex flex-col">
                     <SheetTitle className="text-lg font-semibold flex-shrink-0">Filters & Route</SheetTitle>
                     <div className="flex-1 overflow-y-auto py-4 space-y-4">
                       
@@ -636,19 +875,29 @@ export default function MapPage() {
                               </div>
                               
                               <ScrollArea className="h-[200px]">
-                                <div className="space-y-2">
+                                <div className="space-y-1">
                                   {uniquePracticeTypes.map((practiceType) => (
-                                    <div key={practiceType} className="flex items-center space-x-2">
+                                    <div 
+                                      key={practiceType} 
+                                      className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                                      onClick={(e) => {
+                                        e.preventDefault()
+                                        handlePracticeTypeChange(practiceType || '', !selectedPracticeTypes.has(practiceType || ''))
+                                      }}
+                                    >
                                       <Checkbox
                                         id={practiceType}
                                         checked={selectedPracticeTypes.has(practiceType || '')}
                                         onCheckedChange={(checked) => 
                                           handlePracticeTypeChange(practiceType || '', checked as boolean)
                                         }
+                                        className="h-5 w-5 mr-3 pointer-events-none"
+                                        onClick={(e) => e.stopPropagation()}
                                       />
                                       <label 
                                         htmlFor={practiceType}
-                                        className="text-sm text-card-foreground cursor-pointer"
+                                        className="text-base text-card-foreground cursor-pointer flex-1 select-none"
+                                        onClick={(e) => e.preventDefault()}
                                       >
                                         {practiceType}
                                       </label>
@@ -663,6 +912,152 @@ export default function MapPage() {
                               </div>
                             </div>
                           )}
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* State Filter */}
+                      <Collapsible open={isStateFilterOpen} onOpenChange={setIsStateFilterOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-between p-3 h-auto hover:bg-muted/50 border border-border rounded-lg"
+                          >
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-card-foreground">
+                                States
+                              </h3>
+                              <span className="text-xs text-muted-foreground">
+                                ({selectedStates.size} selected)
+                              </span>
+                            </div>
+                            {isStateFilterOpen ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-2 pb-2">
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                {selectedStates.size} of {allStates.length} selected
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedStates(new Set())}
+                                className="text-xs h-7 px-2"
+                              >
+                                Deselect All
+                              </Button>
+                            </div>
+                            
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-1">
+                                {allStates.map((state) => (
+                                  <div 
+                                    key={state} 
+                                    className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      handleStateChange(state || '', !selectedStates.has(state || ''))
+                                    }}
+                                  >
+                                    <Checkbox
+                                      id={state}
+                                      checked={selectedStates.has(state || '')}
+                                      onCheckedChange={(checked) => 
+                                        handleStateChange(state || '', checked as boolean)
+                                      }
+                                      className="h-5 w-5 mr-3 pointer-events-none"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <label 
+                                      htmlFor={state}
+                                      className="text-base text-card-foreground cursor-pointer flex-1 select-none"
+                                      onClick={(e) => e.preventDefault()}
+                                    >
+                                      {state}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* City Filter */}
+                      <Collapsible open={isCityFilterOpen} onOpenChange={setIsCityFilterOpen}>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-between p-3 h-auto hover:bg-muted/50 border border-border rounded-lg"
+                          >
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-card-foreground">
+                                Cities
+                              </h3>
+                              <span className="text-xs text-muted-foreground">
+                                ({selectedCities.size} selected)
+                              </span>
+                            </div>
+                            {isCityFilterOpen ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-2 pb-2">
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                {selectedCities.size} of {allCities.length} selected
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedCities(new Set())}
+                                className="text-xs h-7 px-2"
+                              >
+                                Deselect All
+                              </Button>
+                            </div>
+                            
+                            <ScrollArea className="h-[200px]">
+                              <div className="space-y-1">
+                                {allCities.map((city) => (
+                                  <div 
+                                    key={city} 
+                                    className="flex items-center p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      handleCityChange(city || '', !selectedCities.has(city || ''))
+                                    }}
+                                  >
+                                    <Checkbox
+                                      id={city}
+                                      checked={selectedCities.has(city || '')}
+                                      onCheckedChange={(checked) => 
+                                        handleCityChange(city || '', checked as boolean)
+                                      }
+                                      className="h-5 w-5 mr-3 pointer-events-none"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <label 
+                                      htmlFor={city}
+                                      className="text-base text-card-foreground cursor-pointer flex-1 select-none"
+                                      onClick={(e) => e.preventDefault()}
+                                    >
+                                      {city}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
                         </CollapsibleContent>
                       </Collapsible>
 
@@ -790,20 +1185,35 @@ export default function MapPage() {
                     </div>
                   </SheetContent>
                 </Sheet>
-              </div>
               
               {/* Full-screen map */}
-              <MapComponent 
-                geocodeData={filteredGeocodeData} 
-                selectedLeads={selectedLeads}
-                onLeadSelection={handleLeadSelection}
-                center={mapCenter}
-                zoom={mapZoom}
-                searchResult={searchResult}
-                onClearSearch={clearSearchResult}
-                userLocation={userLocation}
-                className="h-full w-full"
-              />
+              <div className="relative h-full w-full">
+                {/* Filter Button - Positioned on map */}
+                <div className="absolute top-4 right-4 z-[1000]">
+                  <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                    <SheetTrigger asChild>
+                      <Button
+                        className="h-11 w-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                        title="Filters & Route"
+                      >
+                        <Filter className="h-5 w-5" />
+                      </Button>
+                    </SheetTrigger>
+                  </Sheet>
+                </div>
+                
+                <MapComponent 
+                  geocodeData={filteredGeocodeData} 
+                  selectedLeads={selectedLeads}
+                  onLeadSelection={handleLeadSelection}
+                  center={mapCenter}
+                  zoom={mapZoom}
+                  searchResult={searchResult}
+                  onClearSearch={clearSearchResult}
+                  userLocation={userLocation}
+                  className="h-full w-full"
+                />
+              </div>
             </>
           )}
         </div>
